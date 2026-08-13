@@ -1,0 +1,578 @@
+/*
+ *  This file is part of the Haven & Hearth game client.
+ *  Copyright (C) 2009 Fredrik Tolf <fredrik@dolda2000.com>, and
+ *                     Björn Johannessen <johannessen.bjorn@gmail.com>
+ *
+ *  Redistribution and/or modification of this file is subject to the
+ *  terms of the GNU Lesser General Public License, version 3, as
+ *  published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  Other parts of this source tree adhere to other copying
+ *  rights. Please see the file `COPYING' in the root directory of the
+ *  source tree for details.
+ *
+ *  A copy the GNU Lesser General Public License is distributed along
+ *  with the source tree of which this file is a part in the file
+ *  `doc/LPGL-3'. If it is missing for any reason, please see the Free
+ *  Software Foundation's website at <http://www.fsf.org/>, or write
+ *  to the Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+ *  Boston, MA 02111-1307 USA
+ */
+
+package haven;
+
+import haven.rx.Reactor;
+import integrations.mapv4.MappingClient;
+import me.ender.ClientUtils;
+
+import java.io.*;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.function.*;
+
+public class Config {
+    public static final boolean iswindows = System.getProperty("os.name").startsWith("Windows");
+    public static final String LINE_SEPARATOR = System.lineSeparator();
+    public static final Properties jarprops = getjarprops();
+    public static final File HOMEDIR = getHomeDir();
+    public static final String confid = get().getprop("config.client-id", "KamiClient");
+    public static final Variable<Boolean> par = Variable.def(() -> true);
+    public static final Variable<Boolean> exp = Variable.propb("haven.experimental", false);
+    public static final boolean windows = System.getProperty("os.name", "").startsWith("Windows");
+    public final Properties localprops = getlocalprops(), userprops = getuserprops();
+
+    
+    
+    private static Config global = null;
+    public static Config get() {
+	if(global != null)
+	    return(global);
+	synchronized(Config.class) {
+	    if(global == null)
+		global = new Config();
+	    return(global);
+	}
+    }
+    
+    public static String version;
+    public static final boolean isUpdate;
+    public static boolean center_tile = false;
+    private static String username, playername;
+    public static boolean always_true = true; //always true to facilitate changes with minimal intrusions into loftar's code
+    
+    static {
+	loadBuildVersion();
+	isUpdate = !CFG.VERSION.get().equals(version) || !getFile("changelog.txt").exists();
+	if(isUpdate){
+	    CFG.VERSION.set(version);
+	}
+    }
+    
+    private static void loadBuildVersion() {
+	InputStream in = Config.class.getResourceAsStream("/buildinfo");
+	try {
+	    try {
+		if(in != null) {
+		    Properties info = new Properties();
+		    info.load(in);
+		    version = info.getProperty("version");
+		}
+	    } finally {
+		if (in != null) { in.close(); }
+	    }
+	} catch(IOException e) {
+	    throw(new Error(e));
+	}
+    }
+    
+    private static File getHomeDir() {
+	String dir = get().getprop("config.homedir", "workdir");
+	if("hashdir".equals(dir)) {
+	    /* KamiClient: upstream yanked the local-dir lookup out of HashDirCache
+	     * and into Config.localdir(), dropping the trailing "data" bit on the
+	     * way. localdir() is exactly what findbase().getParent() gave us
+	     * before, so hashdir mode still lands in ~/.haven/kami-client. It can
+	     * hand back null though, so fall through to the workdir if it does. */
+	    Path base = localdir();
+	    if(base != null) {
+		File file = new File(base + File.separator + "kami-client");
+		file.mkdirs();
+		return file.getAbsoluteFile();
+	    }
+	}
+	
+	return new File("").getAbsoluteFile();
+    }
+    
+    public static File getFile(String name) {
+	return new File(HOMEDIR, name);
+    }
+    
+    public static String loadFile(String name) {
+	InputStream inputStream = getFSStream(name);
+	if(inputStream == null) {
+	    inputStream = getJarStream(name);
+	}
+	return getString(inputStream);
+    }
+    
+    public static String loadJarFile(String name) {
+	return getString(getJarStream(name));
+    }
+    
+    public static String loadFSFile(String name, String genus) {
+	String data = loadFSFile(genusFile(name, genus));
+	//TODO: remove this block after W16 ends - this is compatibility for older builds that didn't save files in world-specific folders
+	if(data == null && Objects.equals(genus, "c646473983afec09")) {
+	    data = loadFSFile(name);
+	}
+	return data;
+    }
+    
+    public static String loadFSFile(String name) {
+	return getString(getFSStream(name));
+    }
+    
+    private static InputStream getFSStream(String name) {
+	InputStream inputStream = null;
+	File file = Config.getFile(name);
+	if(file.exists() && file.canRead()) {
+	    try {
+		inputStream = new FileInputStream(file);
+	    } catch (FileNotFoundException ignored) {
+	    }
+	}
+	return inputStream;
+    }
+    
+    private static InputStream getJarStream(String name) {
+	if(name.charAt(0) != '/') {
+	    name = '/' + name;
+	}
+	return Config.class.getResourceAsStream(name);
+    }
+    
+    private static String getString(InputStream inputStream) {
+	if(inputStream != null) {
+	    try {
+		return ClientUtils.stream2str(inputStream);
+	    } catch (Exception ignore) {
+	    } finally {
+		try {inputStream.close();} catch (IOException ignored) {}
+	    }
+	}
+	return null;
+    }
+    
+    public static String genusFile(String name, String genus) {
+	return Paths.get(String.format("world-%s", genus), name).toString();
+    }
+    
+    public static void saveFile(String name, String data, String genus) {
+	saveFile(genusFile(name, genus), data);
+    }
+    
+    public static void saveFile(String name, String data) {
+	File file = Config.getFile(name);
+	boolean exists = file.exists();
+	if(!exists) {
+	    try {
+		String parent = file.getParent();
+		//noinspection ResultOfMethodCallIgnored
+		new File(parent).mkdirs();
+		exists = file.createNewFile();
+	    } catch (IOException ignored) {}
+	}
+	if(exists && file.canWrite()) {
+	    try (FileOutputStream fos = new FileOutputStream(file);
+		 OutputStreamWriter osw = new OutputStreamWriter(fos, StandardCharsets.UTF_8);
+		 BufferedWriter writer = new BufferedWriter(osw)) {
+		writer.write(data);
+	    } catch (IOException e) {
+		e.printStackTrace();
+	    }
+	}
+    }
+
+    private static Path findlocaldir() {
+	try {
+	    windows: {
+		String path = System.getenv("APPDATA");
+		if(path == null)
+		    break windows;
+		Path appdata = Utils.path(path);
+		if(!Files.exists(appdata) || !Files.isDirectory(appdata) || !Files.isReadable(appdata) || !Files.isWritable(appdata))
+		    break windows;
+		Path base = Utils.pj(appdata, "Haven and Hearth");
+		if(!Files.exists(base)) {
+		    try {
+			Files.createDirectories(base);
+		    } catch(IOException e) {
+			break windows;
+		    }
+		}
+		return(base);
+	    }
+	    fallback: {
+		String path = System.getProperty("user.home", null);
+		if(path == null)
+		    break fallback;
+		Path home = Utils.path(path);
+		if(!Files.exists(home) || !Files.isDirectory(home) || !Files.isReadable(home) || !Files.isWritable(home))
+		    break fallback;
+		Path base = Utils.pj(home, ".haven");
+		if(!Files.exists(base)) {
+		    try {
+			Files.createDirectories(base);
+		    } catch(IOException e) {
+			break fallback;
+		    }
+		}
+		return(base);
+	    }
+	} catch(SecurityException e) {
+	}
+	Warning.warn("found no reasonable place to store local files");
+	return(null);
+    }
+
+    private static Path localdir;
+    private static boolean haslocaldir = false;
+    public static Path localdir() {
+	synchronized(Config.class) {
+	    if(!haslocaldir) {
+		localdir = findlocaldir();
+		haslocaldir = true;
+	    }
+	    return(localdir);
+	}
+    }
+
+    private static Properties getjarprops() {
+	Properties ret = new Properties();
+	try(InputStream fp = Config.class.getResourceAsStream("boot-props")) {
+	    if(fp != null)
+		ret.load(fp);
+	} catch(Exception exc) {
+	    /* XXX? Catch all exceptions? It just seems dumb to
+	     * potentially crash here for unforeseen reasons. */
+	    new Warning(exc, "unexpected error occurred when loading local properties").issue();
+	}
+	return(ret);
+    }
+
+    private static Properties getlocalprops() {
+	Properties ret = new Properties();
+	try {
+	    Path jar = Utils.srcpath(Config.class);
+	    if(jar != null) {
+		try(InputStream fp = Files.newInputStream(jar.resolveSibling("haven-config.properties"))) {
+		    ret.load(fp);
+		} catch(NoSuchFileException exc) {
+		    /* That's quite alright. */
+		}
+	    }
+	} catch(Exception exc) {
+	    new Warning(exc, "unexpected error occurred when loading neighboring properties").issue();
+	}
+	return(ret);
+    }
+
+    private static Properties getuserprops() {
+	Properties ret = new Properties();
+	try {
+	    Path base = localdir();
+	    if(base != null) {
+		try(InputStream fp = Files.newInputStream(Utils.pj(base, "haven-config.properties"))) {
+		    ret.load(fp);
+		} catch(NoSuchFileException exc) {
+		    /* That's quite alright. */
+		}
+	    }
+	} catch(Exception exc) {
+	    new Warning(exc, "unexpected error occurred when loading user properties").issue();
+	}
+	return(ret);
+    }
+
+    public String getprop(String name, String def) {
+	String ret;
+	if((ret = Utils.getprop(name, null)) != null)
+	    return(ret);
+	if((ret = localprops.getProperty(name)) != null)
+	    return(ret);
+	if((ret = userprops.getProperty(name)) != null)
+	    return(ret);
+	if((ret = jarprops.getProperty(name)) != null)
+	    return(ret);
+	return(def);
+    }
+
+    public static final Path parsepath(String p) {
+	if((p == null) || p.equals(""))
+	    return(null);
+	return(Utils.path(p));
+    }
+
+    public static final URI parseuri(String url) {
+	if((url == null) || url.equals(""))
+	    return(null);
+	return(Utils.uri(url));
+    }
+
+    public static class Variable<T> {
+	public final Function<Config, T> init;
+	private boolean inited = false;
+	private T val;
+
+	private Variable(Function<Config, T> init) {
+	    this.init = init;
+	}
+
+	public T get() {
+	    if(!inited) {
+		synchronized(this) {
+		    if(!inited) {
+			val = init.apply(Config.get());
+			inited = true;
+		    }
+		}
+	    }
+	    return(val);
+	}
+
+	public void set(T val) {
+	    synchronized(this) {
+		inited = true;
+		this.val = val;
+	    }
+	}
+
+	public static <V> Variable<V> def(Supplier<V> defval) {
+	    return(new Variable<>(cfg -> defval.get()));
+	}
+
+	public static <V> Variable<V> prop(String name, Function<String, V> parse, Supplier<V> defval) {
+	    return(new Variable<>(cfg -> {
+			String pv = cfg.getprop(name, null);
+			return((pv == null) ? defval.get() : parse.apply(pv));
+	    }));
+	}
+
+	public static Variable<String> prop(String name, String defval) {
+	    return(prop(name, Function.identity(), () -> defval));
+	}
+	public static Variable<Integer> propi(String name, int defval) {
+	    return(prop(name, Integer::parseInt, () -> defval));
+	}
+	public static Variable<Boolean> propb(String name, boolean defval) {
+	    return(prop(name, Utils::parsebool, () -> defval));
+	}
+	public static Variable<Double> propf(String name, Double defval) {
+	    return(prop(name, Double::parseDouble, () -> defval));
+	}
+	public static Variable<Ratio> propr(String name, Ratio defval) {
+	    return(prop(name, Ratio::parse, () -> defval));
+	}
+	public static Variable<byte[]> propb(String name, byte[] defval) {
+	    return(prop(name, Utils.hex::dec, () -> defval));
+	}
+	public static Variable<NamedSocketAddress> proph(String name, int defport, NamedSocketAddress defval) {
+	    return(prop(name, val -> NamedSocketAddress.parse(val, defport), () -> defval));
+	}
+	public static Variable<URI> propu(String name, URI defval) {
+	    return(prop(name, Config::parseuri, () -> defval));
+	}
+	public static Variable<URI> propu(String name, String defval) {
+	    return(propu(name, parseuri(defval)));
+	}
+	public static Variable<Path> propp(String name, Path defval) {
+	    return(prop(name, Config::parsepath, () -> defval));
+	}
+	public static Variable<Path> propp(String name, String defval) {
+	    return(propp(name, parsepath(defval)));
+	}
+    }
+
+    public static class Services {
+	public static final Variable<URI> directory = Config.Variable.propu("haven.svcdir", "");
+	public final URI rel;
+	public final Properties props;
+
+	public Services(URI rel, Properties props) {
+	    this.rel = rel;
+	    this.props = props;
+	}
+
+	private static Services fetch(URI uri) {
+	    Properties props = new Properties();
+	    if(uri != null) {
+		Object[] data;
+		try {
+		    try(InputStream fp = Http.fetch(uri.toURL())) {
+			data = new StreamMessage(fp).list();
+		    }
+		} catch(IOException exc) {
+		    throw(new RuntimeException(exc));
+		}
+		for(Object d : data) {
+		    Object[] p = (Object[])d;
+		    props.put(p[0], p[1]);
+		}
+	    }
+	    return(new Services(uri, props));
+	}
+
+	private static Services global = null;
+	public static Services get() {
+	    if(global != null)
+		return(global);
+	    synchronized(Services.class) {
+		if(global == null)
+		    global = fetch(directory.get());
+		return(global);
+	    }
+	}
+
+	public URI geturi(String name) {
+	    String val = props.getProperty(name);
+	    if(val == null)
+		return(null);
+	    return(rel.resolve(parseuri(val)));
+	}
+
+	public static Variable<URI> var(String name, String defval) {
+	    URI def = parseuri(defval);
+	    return new Variable<URI>(cfg -> {
+		    String pv = cfg.getprop("haven." + name, null);
+		    if(pv != null)
+			return(parseuri(pv));
+		    return(Services.get().geturi(name));
+	    });
+	}
+    }
+
+    private static void usage(PrintStream out) {
+	out.println("usage: haven.jar [OPTIONS] [SERVER[:PORT]]");
+	out.println("Options include:");
+	out.println("  -h                 Display this help");
+	out.println("  -d                 Display debug text");
+	out.println("  -P                 Enable profiling");
+	out.println("  -f                 Fullscreen mode");
+	out.println("  -U URL             Use specified external resource URL");
+	out.println("  -r DIR             Use specified resource directory (or HAVEN_RESDIR)");
+	out.println("  -S GAMESERV[:PORT] Use specified game server");
+	out.println("  -u USER            Authenticate as USER (together with -C)");
+	out.println("  -C HEXCOOKIE       Authenticate with specified hex-encoded cookie");
+	out.println("  -p PREFSPEC        Use alternate preference prefix");
+	out.println("  -R REPLAY          Replay protocol recording from file");
+    }
+
+    public static void cmdline(String[] args) {
+	PosixArgs opt = PosixArgs.getopt(args, "hdPfU:r:S:u:C:p:R:");
+	if(opt == null) {
+	    usage(System.err);
+	    System.exit(1);
+	}
+	for(char c : opt.parsed()) {
+	    switch(c) {
+	    case 'h':
+		usage(System.out);
+		System.exit(0);
+		break;
+	    case 'd':
+		UILoop.dbtext.set(true);
+		break;
+	    case 'P':
+		UILoop.profile.set(true);
+		break;
+	    case 'f':
+		Client.initfullscreen.set(true);
+		break;
+	    case 'r':
+		Resource.resdir.set(Utils.path(opt.arg));
+		break;
+	    case 'S':
+		Bootstrap.gameserv.set(NamedSocketAddress.parse(opt.arg, 1870));
+		break;
+	    case 'U':
+		try {
+		    Resource.resurl.set(Utils.uri(opt.arg));
+		} catch(IllegalArgumentException e) {
+		    System.err.println(e);
+		    System.exit(1);
+		}
+		break;
+	    case 'u':
+		Bootstrap.authuser.set(opt.arg);
+		break;
+	    case 'C':
+		Bootstrap.authck.set(Utils.hex.dec(opt.arg));
+		break;
+	    case 'p':
+		Utils.prefspec.set(opt.arg);
+		break;
+	    case 'R':
+		Bootstrap.replay.set(Utils.path(opt.arg));
+		break;
+	    }
+	}
+	if(opt.rest.length > 0)
+	    Bootstrap.authserv.set(NamedSocketAddress.parse(opt.rest[0], AuthClient.DEFPORT));
+	if(opt.rest.length > 1)
+	    Bootstrap.servargs.set(Utils.splice(opt.rest, 1));
+    }
+    
+    public static void setUserName(String username) {
+	Config.username = username;
+    }
+
+    public static String getUserName() {
+	return username;
+    }
+    
+    public static void setPlayerName(String playername) {
+	Config.playername = playername;
+	Reactor.PLAYER.onNext(userpath());
+    }
+    
+    public static String userpath() {
+	return String.format("%s/%s", username, playername);
+    }
+    
+    public static String getPlayerName()
+    {
+	return playername;
+    }
+    
+    static {
+	Console.setscmd("par", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    par.set(Utils.parsebool(args[1]));
+		}
+	    });
+    }
+    
+    public static void initAutomapper(UI ui) {
+        if (MappingClient.initialized()) {
+            MappingClient.destroy();
+	}
+	MappingClient.init(ui.sess.glob);
+	MappingClient automapper = MappingClient.getInstance();
+	automapper.SetPlayerName(playername);
+	automapper.SetEndpoint(CFG.AUTOMAP_ENDPOINT.get());
+	automapper.EnableGridUploads(CFG.AUTOMAP_UPLOAD.get());
+	automapper.EnableTracking(CFG.AUTOMAP_TRACK.get());
+    }
+}

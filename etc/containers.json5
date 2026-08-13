@@ -1,0 +1,42 @@
+{
+  "gfx/terobjs/stonecasket": {
+    empty: [1, 2],
+    full: [17, 18]
+  },
+  "gfx/terobjs/chest": {
+    empty: [1, 2],
+    full: [29, 30]
+  },
+  "gfx/terobjs/largechest": {
+    empty: [1, 2],
+    full: [17, 18]
+  },
+  "gfx/terobjs/crate": {
+    empty: [0],
+    full: [16]
+  },
+  "gfx/terobjs/bonechest": {
+    empty: [1, 2],
+    full: [17, 18]
+  },
+  "gfx/terobjs/cupboard": {
+    empty: [1, 2],
+    full: [29, 30]
+  },
+  "gfx/terobjs/map/squirrelcache[full]": {
+    empty: [1, 2],
+    full: [5, 6]
+  },
+  "gfx/terobjs/map/squirrelcache[empty]": {
+    empty: [1, 2],
+    full: [5, 6]
+  },
+  "gfx/terobjs/metalcabinet": {
+    empty: [1, 2],
+    full: [65, 66]
+  },
+  "gfx/terobjs/coffer": {
+    empty: [1, 2],
+    full: [65, 66]
+  }
+}

@@ -1,0 +1,16 @@
+#String pr
+paginae/add/toggles
+#uint16 pver
+2
+#String name
+Hide trees
+#String preq
+
+#uint16 hk
+104
+#uint16 ad length
+2
+#String ad[0]
+@
+#String ad[1]
+hidetrees

@@ -1,0 +1,2456 @@
+/*
+ *  This file is part of the Haven & Hearth game client.
+ *  Copyright (C) 2009 Fredrik Tolf <fredrik@dolda2000.com>, and
+ *                     Björn Johannessen <johannessen.bjorn@gmail.com>
+ *
+ *  Redistribution and/or modification of this file is subject to the
+ *  terms of the GNU Lesser General Public License, version 3, as
+ *  published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  Other parts of this source tree adhere to other copying
+ *  rights. Please see the file `COPYING' in the root directory of the
+ *  source tree for details.
+ *
+ *  A copy the GNU Lesser General Public License is distributed along
+ *  with the source tree of which this file is a part in the file
+ *  `doc/LPGL-3'. If it is missing for any reason, please see the Free
+ *  Software Foundation's website at <http://www.fsf.org/>, or write
+ *  to the Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+ *  Boston, MA 02111-1307 USA
+ */
+
+package haven;
+
+import haven.Equipory.SLOTS;
+import haven.MapFile.Marker;
+import haven.bot.AutoDrink;
+import haven.res.ui.locptr.Pointer;
+import haven.rx.BuffToggles;
+import haven.rx.Reactor;
+import integrations.mapv4.MappingClient;
+import me.ender.ClientUtils;
+import me.ender.QuestHelper;
+import me.ender.minimap.*;
+import me.ender.timer.Timer;
+
+import java.util.*;
+import java.awt.Color;
+import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
+import java.util.List;
+import java.util.regex.Matcher;
+
+import static haven.ItemFilter.*;
+import haven.render.Location;
+import me.ender.alchemy.AlchemyWnd;
+import static haven.Inventory.invsq;
+import static haven.PType.*;
+
+public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.Handler {
+    private static final int blpw = UI.scale(142), brpw = UI.scale(142);
+    public final String chrid, genus;
+    public final long plid;
+    private final Hidepanel ulpanel, umpanel, urpanel, blpanel, mapmenupanel, brpanel, menupanel;
+    public StatusWdg statuswdg;
+    public TimeWdg timewdg;
+    public Widget portrait;
+    public MenuGrid menu;
+    public MapView map;
+    public PathQueue pathQueue;
+    public QuestHelper questHelper;
+    public GobIcon.Settings iconconf;
+    public MiniMap mmap;
+    public Fightview fv;
+    public Fightsess fsess;
+    // KamiClient: combat distancing tool, yoinked from Hurricane.
+    public haven.bot.CombatDistanceTool combatDistanceTool;
+    public Thread combatDistanceToolThread;
+    private List<Widget> meters = new LinkedList<Widget>();
+    private List<Widget> cmeters = new LinkedList<Widget>();
+    private Text lastmsg;
+    private double msgtime;
+    public Window invwnd, equwnd, srchwnd, iconwnd;
+    private CraftWindow makewnd;
+    public Inventory maininv;
+    public ExtInventory maininvext;
+    public Equipory equipory;
+    public CharWnd chrwdg;
+    public MapWnd2 mapfile;
+    public Minesweeper minesweeper;
+    public TileHighlight.TileHighlightCFG tileHighlight;
+    private Widget qqview;
+    public BuddyWnd buddies;
+    public EquipProxy eqproxyHandBelt, eqproxyPouchBack;
+    public FilterWnd filter;
+    public Cal calendar;
+    private final Zergwnd zerg;
+    public HelpWnd help;
+    public OptWnd opts;
+    public Collection<DraggedItem> hand = new LinkedList<DraggedItem>();
+    private final Collection<DraggedItem> handSave = new LinkedList<DraggedItem>();
+    private boolean handHidden = false;
+    public WItem vhand;
+    public final Object heldNotifier = new Object();
+    public ChatUI chat;
+    public ChatUI.Channel syslog;
+    public Progress prog = null;
+    private boolean afk = false;
+    public BeltSlot[] belt = new BeltSlot[144];
+    public Belt beltwdg;
+    public final Map<Integer, String> polowners = new HashMap<Integer, String>();
+    public Bufflist buffs;
+    public CraftDBWnd craftwnd = null;
+    public AlchemyWnd alchemywnd = null;
+    public ActWindow craftlist, buildlist, actlist;
+    public TimerPanel timers;
+    public StudyWnd studywnd;
+    private Widget questPanel;
+    
+    public static boolean verifiedAccount = false;
+    public static boolean subscribedAccount = false;
+    
+    public static abstract class BeltSlot {
+	public final int idx;
+
+	public BeltSlot(int idx) {
+	    this.idx = idx;
+	}
+
+	public abstract void draw(GOut g);
+	public abstract void use(MenuGrid.Interaction iact);
+    }
+
+    private static final OwnerContext.ClassResolver<ResBeltSlot> beltctxr = new OwnerContext.ClassResolver<ResBeltSlot>()
+	.add(GameUI.class, slot -> slot.wdg())
+	.add(Glob.class, slot -> slot.wdg().ui.sess.glob)
+	.add(Session.class, slot -> slot.wdg().ui.sess);
+    public class ResBeltSlot extends BeltSlot implements GSprite.Owner, RandomSource {
+	public final ResData rdt;
+
+	public ResBeltSlot(int idx, ResData rdt) {
+	    super(idx);
+	    this.rdt = rdt;
+	}
+
+	private GSprite spr = null;
+	public GSprite spr() {
+	    GSprite ret = this.spr;
+	    if(ret == null)
+		ret = this.spr = GSprite.create(this, rdt.res.get(), new MessageBuf(rdt.sdt));
+	    return(ret);
+	}
+
+	public void draw(GOut g) {
+	    try {
+		spr().draw(g);
+	    } catch(Loading l) {}
+	}
+
+	public void use(MenuGrid.Interaction iact) {
+	    Object[] args = {idx, iact.btn, iact.modflags};
+	    if(iact.mc != null) {
+		args = Utils.extend(args, iact.mc.floor(OCache.posres));
+		if(iact.click != null)
+		    args = Utils.extend(args, iact.click.clickargs());
+	    }
+	    GameUI.this.wdgmsg("belt", args);
+	}
+
+	public Resource getres() {return(rdt.res.get());}
+	public Random mkrandoom() {return(new Random(System.identityHashCode(this)));}
+	public <T> T context(Class<T> cl) {return(beltctxr.context(cl, this));}
+	private GameUI wdg() {return(GameUI.this);}
+    }
+
+    public static class PagBeltSlot extends BeltSlot {
+	public final MenuGrid.Pagina pag;
+
+	public PagBeltSlot(int idx, MenuGrid.Pagina pag) {
+	    super(idx);
+	    this.pag = pag;
+	}
+
+	public void draw(GOut g) {
+	    try {
+		MenuGrid.PagButton btn = pag.button();
+		btn.draw(g, btn.spr());
+	    } catch(Loading l) {
+	    }
+	}
+
+	public void use(MenuGrid.Interaction iact) {
+	    try {
+		pag.scm.use(pag.button(), iact, false);
+	    } catch(Loading l) {
+	    }
+	}
+
+	public static MenuGrid.Pagina resolve(MenuGrid scm, Indir<Resource> resid) {
+	    Resource res = resid.get();
+	    Resource.AButton act = res.layer(Resource.action);
+	    /* XXX: This is quite a hack. Is there a better way? */
+	    if((act != null) && (act.ad.length == 0))
+		return(scm.paginafor(res.indir()));
+	    return(scm.paginafor(resid));
+	}
+    }
+
+    /* XXX: Remove me */
+    public BeltSlot mkbeltslot(int idx, ResData rdt) {
+	Resource res = rdt.res.get();
+	Resource.AButton act = res.layer(Resource.action);
+	if(act != null) {
+	    if(act.ad.length == 0)
+		return(new PagBeltSlot(idx, menu.paginafor(res.indir())));
+	    return(new PagBeltSlot(idx, menu.paginafor(rdt.res)));
+	}
+	return(new ResBeltSlot(idx, rdt));
+    }
+
+    public abstract class Belt extends Widget implements DTarget, DropTarget {
+	public Belt(Coord sz) {
+	    super(sz);
+	}
+
+	public void act(int idx, MenuGrid.Interaction iact) {
+	    if(belt[idx] != null)
+		belt[idx].use(iact);
+	}
+
+	public void keyact(int slot) {
+	    if(map != null) {
+		BeltSlot si = belt[slot];
+		Coord mvc = map.rootxlate(ui.mc);
+		if(mvc.isect(Coord.z, map.sz)) {
+		    map.new Hittest(mvc) {
+			    protected void hit(Coord pc, Coord2d mc, ClickData inf) {
+				act(slot, new MenuGrid.Interaction(1, ui.modflags(), mc, inf));
+			    }
+			    
+			    protected void nohit(Coord pc) {
+				act(slot, new MenuGrid.Interaction(1, ui.modflags()));
+			    }
+			}.run();
+		}
+	    }
+	}
+
+	public abstract int beltslot(Coord c);
+
+	public boolean mousedown(MouseDownEvent ev) {
+	    int slot = beltslot(ev.c);
+	    if(slot != -1) {
+		if(ev.b == 1)
+		    act(slot, new MenuGrid.Interaction(1, ui.modflags()));
+		if(ev.b == 3)
+		    GameUI.this.wdgmsg("setbelt", slot, null);
+		return(true);
+	    }
+	    return(super.mousedown(ev));
+	}
+
+	public boolean drop(Coord c, Coord ul) {
+	    int slot = beltslot(c);
+	    if(slot != -1) {
+		GameUI.this.wdgmsg("setbelt", slot, 0);
+		return(true);
+	    }
+	    return(false);
+	}
+
+	public boolean iteminteract(Coord c, Coord ul) {return(false);}
+
+	public boolean dropthing(Coord c, Object thing) {
+	    int slot = beltslot(c);
+	    if(slot != -1) {
+		if(thing instanceof MenuGrid.Pagina) {
+		    MenuGrid.Pagina pag = (MenuGrid.Pagina)thing;
+		    if(ToolBelt.setCustomPagina(GameUI.this, pag, slot)) {
+			return (true);
+		    }
+		    try {
+			if(pag.id instanceof Indir)
+			    GameUI.this.wdgmsg("setbelt", slot, "res", pag.res().name);
+			else
+			    GameUI.this.wdgmsg("setbelt", slot, "pag", pag.id);
+		    } catch(Loading l) {
+		    }
+		    return(true);
+		}
+	    }
+	    return(false);
+	}
+    }
+    
+    @RName("gameui")
+    public static class $_ implements Factory {
+	public Widget create(UI ui, Object[] args) {
+	    String chrid = (String)args[0];
+	    long plid = Utils.uiv(args[1]);
+	    String genus = "";
+	    if(args.length > 2)
+		genus = (String)args[2];
+	    GameUI gui = new GameUI(chrid, plid, genus);
+	    ui.setGUI(gui);
+	    return gui;
+	}
+    }
+    
+    private final Coord minimapc;
+    private final Coord menugridc;
+    public GameUI(String chrid, long plid, String genus) {
+	me.ender.LegacyBGM.onEnterGame();
+	this.chrid = chrid;
+	this.plid = plid;
+	this.genus = genus;
+	if(MappingClient.initialized()) {
+	    MappingClient.getInstance().setGenus(genus);
+	}
+	setcanfocus(true);
+	setfocusctl(true);
+	chat = add(new ChatUI() {
+	    public void resize(Coord c)
+	    {
+		super.resize(c);
+		if (blpanel != null)
+		    blpanel.move();
+		if(fold_bl[2] != null)
+		    fold_bl[2].presize();
+	    }
+	});
+	chat.show(Utils.getprefb("chatvis", true));
+	beltwdg.raise();
+	blpanel = add(new Hidepanel("gui-bl", new Indir<Coord>() {
+	    public Coord get() {
+		if (CFG.VANILLA_CHAT.get())
+		    return(new Coord(0, GameUI.this.sz.y));
+		return(new Coord(0, GameUI.this.sz.y - mapmenupanel.sz.y - chat.sz.y + beltwdg.sz.y + UI.scale(5)));
+	    }
+	}, new Coord(-1,  1)) {
+	    public void move(double a) {
+		super.move(a);
+		mapmenupanel.move();
+	    }
+	});
+	mapmenupanel = add(new Hidepanel("mapmenu", new Indir<Coord>() {
+	    public Coord get() {
+		int x = blpanel.c.y - mapmenupanel.sz.y + UI.scale(33);
+		int y = GameUI.this.sz.y - chat.sz.y - mapmenupanel.sz.y;
+		if (CFG.VANILLA_CHAT.get())
+		    y = GameUI.this.sz.y - mapmenupanel.sz.y;
+		return(new Coord(0, Math.min(x,y)));
+	    }
+	}, new Coord(-1, 0))
+	{
+	    @Override
+	    public void move(double a)
+	    {
+		super.move(a);
+	    }
+	});
+	brpanel = add(new Hidepanel("gui-br", null, new Coord( 1,  1)) {
+		public void move(double a) {
+		    super.move(a);
+		    menupanel.move();
+		}
+	    });
+	menupanel = add(new Hidepanel("menu", new Indir<Coord>() {
+		public Coord get() {
+		    return(new Coord(GameUI.this.sz.x, Math.min(brpanel.c.y - UI.scale(79), GameUI.this.sz.y - menupanel.sz.y)));
+		}
+	    }, new Coord(1, 0)));
+	ulpanel = add(new Hidepanel("gui-ul", null, new Coord(-1, -1)));
+	umpanel = add(new Hidepanel("gui-um", null, new Coord( 0, -1)));
+	urpanel = add(new Hidepanel("gui-ur", null, new Coord( 1, -1)));
+	mapmenupanel.add(new MapMenu(), 0, 0);
+	blpanel.add(new Img(Resource.loadtex("gfx/hud/blframe")), 0, 0);
+	minimapc = new Coord(UI.scale(4), UI.scale(34));
+	Tex rbtnbg = Resource.loadtex("gfx/hud/csearch-bg");
+	Img brframe = brpanel.add(new Img(Resource.loadtex("gfx/hud/brframe")), rbtnbg.sz().x - UI.scale(22), 0);
+	menugridc = brframe.c.add(UI.scale(20), UI.scale(34));
+	Img rbtnimg = brpanel.add(new Img(rbtnbg), 0, brpanel.sz.y - rbtnbg.sz().y);
+	menupanel.add(new MainMenu(), 0, 0);
+	menubuttons(rbtnimg);
+	foldbuttons();
+	if(CFG.HIDE_GAMEUI_PORTRAIT.get()) {
+	    portrait = ulpanel.add(new Widget(Avaview.dasz.add(Window.wbox.bisz())), UI.scale(10, 10));
+	} else {
+	    portrait = ulpanel.add(Frame.with(new Avaview(Avaview.dasz, plid, "avacam"), false), UI.scale(10, 10));
+	}
+	buffs = ulpanel.add(new Bufflist(), portrait.c.x + portrait.sz.x + UI.scale(10), portrait.c.y + ((IMeter.fsz.y + UI.scale(2)) * 2) + UI.scale(5 - 2));
+	calendar = umpanel.add(new Cal(), Coord.z);
+	eqproxyHandBelt = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_HAND, SLOTS.HAND_LEFT, SLOTS.HAND_RIGHT, SLOTS.BELT), UI.scale(420, 5));
+	eqproxyPouchBack = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_POUCH, "EquipProxy2", SLOTS.POUCH_LEFT, SLOTS.POUCH_RIGHT, SLOTS.BACK), UI.scale(420, 35));
+	syslog = chat.add(new ChatUI.Log("System"));
+	opts = add(new OptWnd());
+	opts.hide();
+	zerg = add(new Zergwnd(), Utils.getprefc("wndc-zerg", UI.scale(new Coord(187, 50))));
+	zerg.hide();
+	questHelper = add(new QuestHelper(this), UI.scale(new Coord(187, 50)));
+	questHelper.hide();
+	placemmap();
+	timewdg = add(new TimeWdg(), new Coord(umpanel.c.x - UI.scale(200), 0));
+	CFG.ALWAYS_SHOW_DEWY_TIME.observe(cfg -> timewdg.updateTime());
+	statuswdg = add(new StatusWdg());
+	CFG.Observer<Boolean> change = cfg -> {
+	    synchronized (this) {
+		if (!blpanel.tvis && CFG.VANILLA_CHAT.get()) {
+		    blpanel.mshow2(true);
+		    mapmenupanel.mshow2(true);
+		}
+		resize(GameUI.this.sz);
+	    }
+	};
+	CFG.VANILLA_CHAT.observe(change);
+    }
+
+    protected void attached() {
+	iconconf = loadiconconf();
+	super.attached();
+    }
+
+    @Override
+    protected void attach(UI ui) {
+	ui.setGUI(this);
+	ui.sess.user.genus = genus;
+	Config.initAutomapper(ui);
+	Timer.start(this);
+	super.attach(ui);
+    }
+
+    @Override
+    public void destroy() {
+	closeWindows();
+	untrackAllMarkers();
+	super.destroy();
+	ui.clearGUI(this);
+    }
+    
+    private static void closeWindow(Window wnd) { if(wnd != null) {wnd.close();} }
+    
+    private void closeWindows() {
+	closeWindow(craftwnd); //craftwnd = null;
+	closeWindow(timers); //craftwnd = null;
+	closeWindow(actlist); actlist = null;
+	closeWindow(craftlist); craftlist = null;
+	closeWindow(buildlist); buildlist = null;
+	closeWindow(studywnd); studywnd = null;
+    }
+
+    public static final KeyBinding kb_srch = KeyBinding.get("scm-srch", KeyMatch.nil);
+    private void menubuttons(Widget bg) {
+	brpanel.add(new MenuButton("csearch", kb_srch, "Search actions...") {
+		public void click() {
+		    if(srchwnd == null)
+			return;
+		    if(srchwnd.visible() && !srchwnd.hasfocus)
+			this.setfocus(srchwnd);
+		    else
+			togglewnd(srchwnd);
+		}
+	    }, bg.c);
+    }
+
+    /* Ice cream */
+    private final IButton[] fold_br = new IButton[4];
+    private final IButton[] fold_bl = new IButton[4];
+    private void updfold(boolean reset) {
+	int br;
+	if(brpanel.tvis && menupanel.tvis)
+	    br = 0;
+	else if(brpanel.tvis && !menupanel.tvis)
+	    br = 1;
+	else if(!brpanel.tvis && !menupanel.tvis)
+	    br = 2;
+	else
+	    br = 3;
+	for(int i = 0; i < fold_br.length; i++)
+	    fold_br[i].show(i == br);
+
+	int bl;
+	if(blpanel.tvis && mapmenupanel.tvis)
+	    bl = 0;
+	else if(blpanel.tvis && !mapmenupanel.tvis)
+	    bl = 1;
+	else if(!blpanel.tvis && !mapmenupanel.tvis)
+	    bl = 2;
+	else
+	    bl = 3;
+	for(int i = 0; i < fold_bl.length; i++)
+	    fold_bl[i].show(i == bl);
+
+	if(reset)
+	    resetui();
+    }
+
+    private void foldbuttons() {
+	final Tex rdnbg = Resource.loadtex("gfx/hud/rbtn-maindwn");
+	final Tex rupbg = Resource.loadtex("gfx/hud/rbtn-upbg");
+	fold_br[0] = new IButton("gfx/hud/rbtn-dwn", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(rdnbg, Coord.z); super.draw(g);}
+		public void click() {
+		    menupanel.cshow(false);
+		    updfold(true);
+		}
+	    };
+	fold_br[1] = new IButton("gfx/hud/rbtn-dwn", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(rdnbg, Coord.z); super.draw(g);}
+		public void click() {
+		    brpanel.cshow(false);
+		    updfold(true);
+		}
+	    };
+	fold_br[2] = new IButton("gfx/hud/rbtn-up", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(rupbg, Coord.z); super.draw(g);}
+		public void click() {
+		    menupanel.cshow(true);
+		    updfold(true);
+		}
+		public void presize() {
+		    this.c = parent.sz.sub(this.sz);
+		}
+	    };
+	fold_br[3] = new IButton("gfx/hud/rbtn-dwn", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(rdnbg, Coord.z); super.draw(g);}
+		public void click() {
+		    brpanel.cshow(true);
+		    updfold(true);
+		}
+	    };
+	menupanel.add(fold_br[0], 0, 0);
+	fold_br[0].lower();
+	brpanel.adda(fold_br[1], brpanel.sz.x, UI.scale(32), 1, 1);
+	adda(fold_br[2], 1, 1);
+	fold_br[2].lower();
+	menupanel.add(fold_br[3], 0, 0);
+	fold_br[3].lower();
+
+	final Tex ldnbg = Resource.loadtex("gfx/hud/lbtn-bgs");
+	final Tex lupbg = Resource.loadtex("gfx/hud/lbtn-upbg");
+	fold_bl[0] = new IButton("gfx/hud/lbtn-dwn", "", "-d", "-h") {
+		public void click() {
+		    mapmenupanel.cshow(false);
+		    updfold(true);
+		}
+	    };
+	fold_bl[1] = new IButton("gfx/hud/lbtn-dwn", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(ldnbg, Coord.z); super.draw(g);}
+		public void click() {
+		    blpanel.cshow(false);
+		    updfold(true);
+		}
+	    };
+	fold_bl[2] = new IButton("gfx/hud/lbtn-up", "", "-d", "-h") {
+		public void draw(GOut g) {g.image(lupbg, Coord.z); super.draw(g);}
+		public void click() {
+		    mapmenupanel.cshow(true);
+		    updfold(true);
+		}
+		public void presize() {
+		    this.c = new Coord(0, parent.sz.y - sz.y).sub(0, (CFG.VANILLA_CHAT.get() ? 0 : chat.sz.y));
+		}
+	    };
+	fold_bl[3] = new IButton("gfx/hud/lbtn-dwn", "", "-d", "-h") {
+		public void click() {
+		    blpanel.cshow(true);
+		    updfold(true);
+		}
+	    };
+	mapmenupanel.add(fold_bl[0], 0, 0);
+	blpanel.adda(fold_bl[1], 0, UI.scale(33), 0, 1);
+	adda(fold_bl[2], 0, 1);
+	fold_bl[2].lower();
+	mapmenupanel.add(fold_bl[3], 0, 0);
+
+	updfold(false);
+    }
+
+    @Override
+    public void bound() {
+        super.bound();
+	BuffToggles.init(this);
+	AutoDrink.getInstance().init(this);
+    }
+
+    protected void added() {
+	resize(parent.sz);
+	ui.cons.out = new java.io.PrintWriter(new java.io.Writer() {
+		StringBuilder buf = new StringBuilder();
+		
+		public void write(char[] src, int off, int len) {
+		    List<String> lines = new ArrayList<String>();
+		    synchronized(this) {
+			buf.append(src, off, len);
+			int p;
+			while((p = buf.indexOf("\n")) >= 0) {
+			    String ln = buf.substring(0, p).replace("\t", "        ");
+			    lines.add(ln);
+			    buf.delete(0, p + 1);
+			}
+		    }
+		    for(String ln : lines) {
+			syslog.append(ln, Color.WHITE);
+		    	System.out.println(ln);
+		    }
+		}
+		
+		public void close() {}
+		public void flush() {}
+	    });
+	Debug.log = ui.cons.out;
+	opts.c = sz.sub(opts.sz).div(2);
+    }
+
+    public void dispose() {
+	savewndpos();
+	Debug.log = new java.io.PrintWriter(System.err);
+	ui.cons.clearout();
+	pathQueue.clear();
+	if(alchemywnd != null) {
+	    alchemywnd.close();
+	    alchemywnd = null;
+	}
+	if(craftwnd != null) {
+	    craftwnd.close();
+	    craftwnd = null;
+	}
+	super.dispose();
+    }
+    
+
+    public void toggleCraftList() {
+	if(craftlist == null){
+	    craftlist = add(new ActWindow("Craft…", "paginae/craft/.+"), ClientUtils.getScreenCenter(ui));
+	    craftlist.addtwdg(new IButton("gfx/hud/btn-help", "","-d","-h"){
+		@Override
+		public void click() {
+		    ItemFilter.showHelp(ui, HELP_SIMPLE, HELP_CURIO, HELP_FEP, HELP_ARMOR, HELP_SYMBEL, HELP_ATTR, HELP_INPUTS);
+		}
+	    });
+	} else if(craftlist.visible) {
+	    craftlist.hide();
+	} else {
+	    craftlist.show();
+	}
+    }
+
+    public void toggleBuildList() {
+	if(buildlist == null){
+	    buildlist = add(new ActWindow("Build…", "paginae/bld/.+"), ClientUtils.getScreenCenter(ui));
+	    buildlist.addtwdg(new IButton("gfx/hud/btn-help", "","-d","-h"){
+		@Override
+		public void click() {
+		    ItemFilter.showHelp(ui, HELP_SIMPLE, HELP_INPUTS);
+		}
+	    });
+	} else if(buildlist.visible) {
+	    buildlist.hide();
+	} else {
+	    buildlist.show();
+	}
+    }
+
+    public void toggleActList() {
+	if(actlist == null){
+	    actlist = add(new ActWindow("Act…", "paginae/act/.+|paginae/pose/.+|paginae/gov/.+|paginae/add/.+|gfx/fx/msrad|ui/tt/q/quality"), ClientUtils.getScreenCenter(ui));
+	} else if(actlist.visible) {
+	    actlist.hide();
+	} else {
+	    actlist.show();
+	}
+    }
+    
+    public void toggleChat() {
+	if(chat.visible() && !chat.hasfocus) {
+	    setfocus(chat);
+	} else {
+	    if(chat.targetshow) {
+		chat.sshow(false);
+	    } else {
+		chat.sshow(true);
+		setfocus(chat);
+	    }
+	}
+	Utils.setprefb("chatvis", chat.targetshow);
+    }
+    
+    public void toggleFilter() {
+	if(filter == null) {
+	    filter = add(new FilterWnd(), ClientUtils.getScreenCenter(ui));
+	}
+	filter.toggle();
+    }
+    
+    public void toggleCraftDB() {
+	if(craftwnd == null) {
+	    craftwnd = add(new CraftDBWnd(), ClientUtils.getScreenCenter(ui));
+	} else {
+	    craftwnd.close();
+	}
+    }
+    
+    public void toggleAlchemyDB() {
+	if(alchemywnd == null) {
+	    alchemywnd = add(new AlchemyWnd(), ClientUtils.getScreenCenter(ui).sub(AlchemyWnd.WND_SZ.div(2)));
+	} else {
+	    alchemywnd.close();
+	}
+    }
+    
+    public void toggleTimers() {
+	if(timers == null) {
+	    timers = add(new TimerPanel(), 250, 100);
+	} else {
+	    timers.tvisible();
+	}
+    }
+    
+    public void toggleMap() {
+	if((mapfile != null) && mapfile.show(!mapfile.visible)) {
+	    mapfile.raise();
+	    fitwdg(mapfile);
+	    setfocus(mapfile);
+	}
+    }
+
+    public class Hidepanel extends Widget {
+	public final String id;
+	public final Coord g;
+	public final Indir<Coord> base;
+	public boolean tvis;
+	private double cur;
+
+	public Hidepanel(String id, Indir<Coord> base, Coord g) {
+	    this.id = id;
+	    this.base = base;
+	    this.g = g;
+	    if(CFG.DISABLE_UI_HIDING.get()) {
+		tvis = true;
+	    } else {
+		tvis = Utils.getprefb(id + "-visible", true);
+		
+	    }
+	    cur = show(tvis)?0:1;
+	}
+
+	public <T extends Widget> T add(T child) {
+	    super.add(child);
+	    pack();
+	    if(parent != null)
+		move();
+	    return(child);
+	}
+
+	public Coord base() {
+	    if(base != null) return(base.get());
+	    return(new Coord((g.x > 0)?parent.sz.x:(g.x < 0)?0:((parent.sz.x - this.sz.x) / 2),
+			     (g.y > 0)?parent.sz.y:(g.y < 0)?0:((parent.sz.y - this.sz.y) / 2)));
+	}
+
+	public void move(double a) {
+	    cur = a;
+	    Coord c = new Coord(base());
+	    if(g.x < 0)
+		c.x -= (int)(sz.x * a);
+	    else if(g.x > 0)
+		c.x -= (int)(sz.x * (1 - a));
+	    if(g.y < 0)
+		c.y -= (int)(sz.y * a);
+	    else if(g.y > 0)
+		c.y -= (int)(sz.y * (1 - a));
+	    this.c = c;
+	}
+
+	public void move() {
+	    move(cur);
+	}
+
+	public void presize() {
+	    move();
+	}
+
+	public void cresize(Widget ch) {
+	    sz = contentsz();
+	}
+
+	public boolean mshow(final boolean vis) {
+	    clearanims(Anim.class);
+	    if(vis)
+		show();
+	    new NormAnim(0.25) {
+		final double st = cur, f = vis?0:1;
+
+		public void ntick(double a) {
+		    if((a == 1.0) && !vis)
+			hide();
+		    move(st + (Utils.smoothstep(a) * (f - st)));
+		}
+	    };
+	    tvis = vis;
+	    updfold(false);
+	    return(vis);
+	}
+	
+	public boolean mshow2(final boolean vis) {
+	    clearanims(Anim.class);
+	    if(vis)
+		show();
+	    if(!vis)
+		hide();
+	    move(0);
+	    tvis = vis;
+	    updfold(false);
+	    return(vis);
+	}
+
+	public boolean mshow() {
+	    return(mshow(Utils.getprefb(id + "-visible", true)));
+	}
+
+	public boolean cshow(boolean vis) {
+	    Utils.setprefb(id + "-visible", vis);
+	    if(vis != tvis)
+		mshow(vis);
+	    return(vis);
+	}
+
+	public void cdestroy(Widget w) {
+	    parent.cdestroy(w);
+	}
+    }
+
+    public static class Hidewnd extends WindowX {
+	public Hidewnd(Coord sz, String cap, boolean lg) {
+	    super(sz, cap, lg);
+	}
+ 
+	public Hidewnd(Coord sz, String cap) {
+	    super(sz, cap);
+	}
+
+	public void reqclose() {
+	    hide();
+	}
+ 
+	public void toggle() {
+	    show(!visible);
+	    if(visible) {this.raise();}
+	}
+    }
+
+    public static class Zergwnd extends Hidewnd {
+	public final Tabs tabs = new Tabs(Coord.z, Coord.z, this);
+	public final TButton kin;
+	public final Collection<PTab<Category>> types = new ArrayList<>();
+
+	public static class Category extends Widget {
+	    public final String id;
+	    public final List<Polity> pols = new ArrayList<>();
+	    public final Widget cap;
+	    public Widget sel = null;
+	    private Coord polc = Coord.z;
+
+	    public Category(String id, String name) {
+		this.id = id;
+		/* KamiClient: the caption is a UI label ("Village", "Realm"),
+		 * so it goes through L10N. This used to live in the ui/vlg and
+		 * ui/realm res code, which upstream moved up here. */
+		cap = add(new Img(CharWnd.catf.i10n_label(name).tex()));
+	    }
+
+	    public class Selector extends SDropBox<Polity, Widget> {
+		public Selector() {
+		    super(BuddyWnd.width, UI.scale(75), Polity.nmf.height());
+		    for(Widget ch : Category.this.children()) {
+			if((ch instanceof Polity) && ch.visible()) {
+			    super.change((Polity)ch);
+			    break;
+			}
+		    }
+		}
+
+		protected List<Polity> items() {return(pols);}
+		protected Widget makeitem(Polity pol, int idx, Coord sz) {
+		    return(TextItem.of(sz, Polity.nmf, () -> pol.name));
+		}
+
+		public void change(Polity pol) {
+		    super.change(pol);
+		    select(pol);
+		}
+	    }
+
+	    private void updsel() {
+		if(sel != null)
+		    sel.destroy();
+		if(pols.isEmpty()) {
+		    sel = null;
+		} else if(pols.size() == 1) {
+		    /* KamiClient: a polity's name is player data, never
+		     * translate it. The Selector path below already renders
+		     * through Polity.nmf directly, so it is fine as-is. */
+		    sel = new Label.Untranslated(pols.get(0).name, Polity.nmf);
+		} else {
+		    sel = new Selector();
+		}
+		Coord c = cap.pos("bl").adds(0, 2);
+		if(sel != null)
+		    c = add(sel, c).pos("bl").adds(0, 5);
+		if(!Utils.eq(c, polc)) {
+		    polc = c;
+		    for(Polity pol : pols)
+			pol.move(polc);
+		    pack();
+		}
+	    }
+
+	    public void select(Polity sel) {
+		for(Polity pol : pols)
+		    pol.show(pol == sel);
+		pack();
+	    }
+
+	    public void cresize(Widget ch) {
+		pack();
+	    }
+
+	    public void addpol(Polity p) {
+		pols.add(add(p));
+		if(sel != null)
+		    p.move(polc);
+		select(p);
+		updsel();
+	    }
+
+	    public void cdestroy(Widget w) {
+		if(pols.contains(w)) {
+		    pols.remove(w);
+		    updsel();
+		    if(pols.isEmpty()) {
+			destroy();
+		    } else {
+			if(w.visible) {
+			    if(pols.size() > 1)
+				((Selector)sel).change(pols.get(0));
+			    else
+				pols.get(0).show(true);
+			}
+		    }
+		}
+	    }
+	}
+
+	class PTab<W extends Widget> extends Tabs.Tab {
+	    public final W main;
+	    public final TButton tb;
+
+	    public PTab(W main, TButton tb) {
+		tabs.super();
+		this.main = main;
+		this.tb = tb;
+	    }
+
+	    public void cdestroy(Widget w) {
+		if(w == main) {
+		    destroy();
+		    tb.destroy();
+		    Zergwnd.this.types.remove(this);
+		    repack();
+		    if(tabs.curtab == this) {
+			tabs.showtab(kin.tab);
+			repack();
+		    }
+		}
+	    }
+
+	    public void cresize(Widget ch) {
+		repack();
+	    }
+	}
+
+	class TButton extends IButton {
+	    public final Resource.Image upimg;
+	    public PTab tab = null;
+
+	    TButton(String nm) {
+		super("gfx/hud/buttons/" + nm, "u", "d", null);
+		upimg = Resource.loadrimg("gfx/hud/buttons/" + nm + "u");
+		Resource.Tooltip tt = upimg.getres().layer(Resource.tooltip);
+		if(tt != null)
+		    settip(tt.t);
+	    }
+
+	    public void click() {
+		if(tab != null) {
+		    tabs.showtab(tab);
+		    repack();
+		}
+	    }
+
+	    protected void depress() {
+		ui.sfx(Button.clbtdown.stream());
+	    }
+
+	    protected void unpress() {
+		ui.sfx(Button.clbtup.stream());
+	    }
+	}
+
+	Zergwnd() {
+	    super(Coord.z, "Kith & Kin", true);
+	    kin = add(new TButton("kin"));
+	    kin.tooltip = Text.render("Kin");
+	}
+
+	private void repack() {
+	    tabs.indpack();
+	    kin.move(Coord.of(0, tabs.curtab.contentsz().y + UI.scale(20)));
+	    List<TButton> pbtns = new ArrayList<>();
+	    for(Widget ch : children()) {
+		if((ch instanceof TButton) && (ch != kin))
+		    pbtns.add((TButton)ch);
+	    }
+	    pbtns.sort((a, b) -> a.upimg.z - b.upimg.z);
+	    Widget lf = kin, prev = lf;
+	    int x = 1;
+	    for(TButton pbtn : pbtns) {
+		if(x < 3) {
+		    pbtn.move(prev.pos("ur").adds(10, 0));
+		    prev = pbtn;
+		    x++;
+		} else {
+		    pbtn.move(lf.pos("bl").adds(0, 10));
+		    lf = prev = pbtn;
+		    x = 0;
+		}
+	    }
+	    this.pack();
+	}
+
+	public <W extends Widget> PTab<W> ntab(W ch, TButton tb) {
+	    PTab<W> tab = add(new PTab<>(ch, tb), tabs.c);
+	    tab.add(ch, Coord.z);
+	    tb.tab = tab;
+	    repack();
+	    return(tab);
+	}
+
+	private PTab<Category> getptab(String name) {
+	    PTab<Category> tab = null;
+	    for(PTab<Category> cur : types) {
+		if(Utils.eq(cur.main.id, name)) {
+		    tab = cur;
+		    break;
+		}
+	    }
+	    if(tab == null) {
+		TButton tb = add(new TButton(name));
+		tab = ntab(new Category(name, tb.upimg.getres().flayer(Resource.tooltip).t), tb);
+		types.add(tab);
+	    }
+	    return(tab);
+	}
+
+	public void addpol(Polity p) {
+	    getptab(p.type()).main.addpol(p);
+	}
+    }
+
+    public static class DraggedItem {
+	public final GItem item;
+	final Coord dc;
+
+	DraggedItem(GItem item, Coord dc) {
+	    this.item = item; this.dc = dc;
+	}
+    }
+
+    private void updhand() {
+	if((hand.isEmpty() && (vhand != null)) || ((vhand != null) && !hand.contains(vhand.item))) {
+	    ui.destroy(vhand);
+	    vhand = null;
+	}
+	if(!hand.isEmpty() && (vhand == null)) {
+	    DraggedItem fi = hand.iterator().next();
+	    vhand = add(new ItemDrag(fi.dc, fi.item));
+	}
+    }
+    
+    public void togglePeace() {
+	try {
+	    if (fv != null && fv.curdisp != null && fv.curdisp.give != null) {
+		fv.curdisp.give.wdgmsg("click", 1);
+	    }
+	} catch (Exception e) {
+	    e.printStackTrace();
+	}
+    }
+
+    public void toggleHand() {
+	if (handHidden) {
+	    hand.addAll(handSave);
+	    handSave.clear();
+	} else {
+	    handSave.addAll(hand);
+	    hand.clear();
+	}
+	updhand();
+	handHidden = !handHidden;
+    }
+    
+    public void toggleQuestHelper() {
+	questHelper.toggle();
+    }
+
+    // KamiClient: open/close the combat distancing tool (yoinked from Hurricane).
+    public void toggleCombatDistanceTool() {
+	if(combatDistanceTool == null && combatDistanceToolThread == null) {
+	    combatDistanceTool = new haven.bot.CombatDistanceTool(this);
+	    add(combatDistanceTool, Utils.getprefc("wndc-combatDistanceToolWindow", new Coord(sz.x / 2 - combatDistanceTool.sz.x / 2, sz.y / 2 - combatDistanceTool.sz.y / 2 - 200)));
+	    combatDistanceToolThread = new Thread(combatDistanceTool, "CombatDistanceTool");
+	    combatDistanceToolThread.start();
+	} else if(combatDistanceTool != null) {
+	    combatDistanceTool.stop();
+	    combatDistanceTool.reqdestroy();
+	    combatDistanceTool = null;
+	    combatDistanceToolThread = null;
+	}
+    }
+    
+    public DraggedItem hand() {
+	Collection<DraggedItem> collection;
+	if(handHidden) {
+	    collection = handSave;
+	} else {
+	    collection = hand;
+	}
+	return collection.stream().findFirst().orElse(null);
+    }
+
+    public void toggleStudy() {
+	studywnd.toggle();
+    }
+
+    public void addcmeter(Widget meter) {
+	Widget meterwdg = meter;
+	if(meter instanceof IMeter)
+	    meterwdg = new MeterWidgetBox(metername((IMeter)meter, "cmeter-" + cmeters.size()), (IMeter)meter);
+	add(meterwdg);
+	cmeters.add(meter);
+	updcmeters();
+    }
+
+    public <T extends Widget> void delcmeter(Class<T> cl) {
+	Widget widget = null;
+	for (Widget meter : cmeters) {
+	    if (cl.isAssignableFrom(meter.getClass())) {
+		widget = meter;
+		break;
+	    }
+	}
+	if (widget != null) {
+	    cmeters.remove(widget);
+	    widget.destroy();
+	    updcmeters();
+	}
+    }
+
+    private void updcmeters() {
+	int i = meters.size();
+	Widget last = null;
+	for (Widget meter : cmeters) {
+	    int x = ( i % 3) * (IMeter.fsz.x + UI.scale(5));
+	    int y = (i / 3) * (IMeter.fsz.y + UI.scale(2));
+	    Widget wdg = meterbox(meter);
+	    if(!(wdg instanceof DraggableWidget))
+		wdg.c = portrait.rootpos().sub(rootpos()).add(portrait.sz.x + UI.scale(10) + x, y);
+	    last = wdg;
+	    i++;
+	}
+
+	if(last == null && !meters.isEmpty()) {
+	    last = meterbox(meters.get(meters.size() - 1));
+	}
+	if(last != null) {
+	    buffs.c.y = last.c.y + last.sz.y + UI.scale(2);
+
+	}
+    }
+
+    private Widget meterbox(Widget meter) {
+	if(meter.parent instanceof MeterWidgetBox)
+	    return meter.parent;
+	if(meter.parent instanceof MovableWidgetBox)
+	    return meter.parent;
+	return meter;
+    }
+
+    private String metername(IMeter meter, String fallback) {
+	try {
+	    Resource res = meter.bg.get();
+	    if(res != null)
+		return res.basename();
+	} catch(Loading l) {
+	}
+	return fallback;
+    }
+
+    private String mapfilename() {
+	StringBuilder buf = new StringBuilder();
+	buf.append(genus);
+	String chrid = Utils.getpref("mapfile/" + this.chrid, "");
+	if(!chrid.equals("")) {
+	    if(buf.length() > 0) buf.append('/');
+	    buf.append(chrid);
+	}
+	return(buf.toString());
+    }
+
+    public Coord optplacement(Widget child, Coord org) {
+	Set<Window> closed = new HashSet<>();
+	Set<Coord> open = new HashSet<>();
+	open.add(org);
+	Coord opt = null;
+	double optscore = Double.NEGATIVE_INFINITY;
+	Coord plc = null;
+	{
+	    Gob pl = map.player();
+	    if(pl != null) {
+		Coord3f raw = pl.placed.getc();
+		if(raw != null)
+		    plc = map.screenxf(raw).round2();
+	    }
+	}
+	Area parea = Area.sized(Coord.z, sz);
+	while(!open.isEmpty()) {
+	    Coord cur = Utils.take(open);
+	    double score = 0;
+	    Area tarea = Area.sized(cur, child.sz);
+	    if(parea.isects(tarea)) {
+		double outside = 1.0 - (((double)parea.overlap(tarea).area()) / ((double)tarea.area()));
+		if((outside > 0.75) && !cur.equals(org))
+		    continue;
+		score -= Math.pow(outside, 2) * 100;
+	    } else {
+		if(!cur.equals(org))
+		    continue;
+		score -= 100;
+	    }
+	    {
+		boolean any = false;
+		for(Widget wdg = this.child; wdg != null; wdg = wdg.next) {
+		    if(!(wdg instanceof Window))
+			continue;
+		    Window wnd = (Window)wdg;
+		    if(!wnd.visible())
+			continue;
+		    Area warea = wnd.parentarea(this);
+		    if(warea.isects(tarea)) {
+			any = true;
+			score -= ((double)warea.overlap(tarea).area()) / ((double)tarea.area());
+			if(!closed.contains(wnd)) {
+			    open.add(new Coord(wnd.c.x - child.sz.x, cur.y));
+			    open.add(new Coord(cur.x, wnd.c.y - child.sz.y));
+			    open.add(new Coord(wnd.c.x + wnd.sz.x, cur.y));
+			    open.add(new Coord(cur.x, wnd.c.y + wnd.sz.y));
+			    closed.add(wnd);
+			}
+		    }
+		}
+		if(!any)
+		    score += 10;
+	    }
+	    if(plc != null) {
+		if(tarea.contains(plc))
+		    score -= 100;
+		else
+		    score -= (1 - Math.pow(tarea.closest(plc).dist(plc) / sz.dist(Coord.z), 0.5)) * 1.5;
+	    }
+	    score -= (cur.dist(org) / sz.dist(Coord.z)) * 0.75;
+	    if(score > optscore) {
+		optscore = score;
+		opt = cur;
+	    }
+	}
+	return(opt);
+    }
+
+    private void savewndpos() {
+	if(invwnd != null)
+	    Utils.setprefc("wndc-inv", invwnd.c);
+	if(equwnd != null)
+	    Utils.setprefc("wndc-equ", equwnd.c);
+	if(chrwdg != null)
+	    Utils.setprefc("wndc-chr", chrwdg.c);
+	if(zerg != null)
+	    Utils.setprefc("wndc-zerg", zerg.c);
+	if(mapfile != null) {
+	    Utils.setprefc("wndc-map", mapfile.c);
+	    Utils.setprefc("wndsz-map", mapfile.csz());
+	}
+    }
+
+    private final BMap<String, Window> wndids = new HashBMap<String, Window>();
+
+    public void addchild(Widget child, Object... args) {
+	String place = ((String)args[0]).intern();
+	if(place == "mapview") {
+	    child.resize(sz);
+	    map = add((MapView)child, Coord.z);
+	    this.pathQueue = new PathQueue(map);
+	    ui.sess.glob.oc.paths.path = this.pathQueue;
+	    map.lower();
+	    if(mmap != null)
+		ui.destroy(mmap);
+	    if(mapfile != null) {
+		ui.destroy(mapfile);
+		mapfile = null;
+	    }
+	    ResCache mapstore = ResCache.global;
+	    if(MapFile.mapbase.get() != null)
+		mapstore = HashDirCache.get(MapFile.mapbase.get());
+	    if(mapstore != null) {
+		MapFile file;
+		try {
+		    file = MapFile.load(mapstore, mapfilename());
+		    if(CFG.AUTOMAP_UPLOAD.get() && MappingClient.initialized()) {
+			MappingClient.getInstance().setGenus(genus);
+			MappingClient.getInstance().ProcessMap(file, (m) -> {
+			    if(m instanceof PMarker) {
+				return CFG.AUTOMAP_MARKERS.get().stream()
+				    .map(group -> group.col)
+				    .anyMatch(color -> color.equals(((PMarker)m).color));
+			    }
+			    return true;
+			});
+		    }
+		} catch(java.io.IOException e) {
+		    /* XXX: Not quite sure what to do here. It's
+		     * certainly not obvious that overwriting the
+		     * existing mapfile with a new one is better. */
+		    throw(new RuntimeException("failed to load mapfile", e));
+		}
+		mmap = blpanel.add(new CornerMap(UI.scale(new Coord(133, 133)), file), minimapc);
+		mmap.lower();
+		mapfile = new MapWnd2(file, map, Utils.getprefc("wndsz-map", UI.scale(new Coord(700, 500))), "Map");
+		mapfile.reqclose(() -> {
+		    Utils.setprefb("wndvis-map", false);
+		    mapfile.hide();
+		});
+		mapfile.show(Utils.getprefb("wndvis-map", false));
+		add(mapfile, Utils.getprefc("wndc-map", new Coord(50, 50)));
+		minesweeper = new Minesweeper(file);
+	    }
+	    placemmap();
+	} else if(place == "menu") {
+	    menu = (MenuGrid)brpanel.add(child, menugridc);
+	    createToolBelts();
+	    fitwdg(srchwnd = GameUI.this.add(new MenuSearch.Main(menu), Utils.getprefc("wndc-srch", UI.scale(200, 200))));
+	    srchwnd.reqclose(srchwnd::hide).hide();
+	} else if(place == "fight") {
+	    fv = urpanel.add((Fightview)child, 0, 0);
+	} else if(place == "fsess") {
+	    fsess = add((Fightsess)child, Coord.z);
+	} else if(place == "inv") {
+	    invwnd = new Hidewnd(Coord.z, "Inventory") {
+		    public void cresize(Widget ch) {
+			pack();
+		    }
+		};
+	    invwnd.add(maininvext = (ExtInventory)child, Coord.z);
+	    invwnd.pack();
+	    invwnd.hide();
+	    maininv = maininvext.inv;
+	    maininv.enableDrops();
+	    add(invwnd, Utils.getprefc("wndc-inv", new Coord(100, 100)));
+	} else if(place == "equ") {
+	    equwnd = new Hidewnd(Coord.z, "Equipment");
+	    equipory = equwnd.add((Equipory) child, Coord.z);
+	    equwnd.pack();
+	    equwnd.hide();
+	    add(equwnd, Utils.getprefc("wndc-equ", new Coord(400, 10)));
+	} else if(place == "hand") {
+	    GItem g = add((GItem)child);
+	    Coord lc = (Coord)args[1];
+	    if(handHidden) {
+	    	handSave.add(new DraggedItem(g, lc));
+	    } else {
+	    	hand.add(new DraggedItem(g, lc));
+	    }
+	    updhand();
+	    synchronized (heldNotifier) { heldNotifier.notifyAll(); }
+	} else if(place == "chr") {
+	    studywnd = add(new StudyWnd(), ClientUtils.getScreenCenter(ui));
+	    studywnd.hide();
+	    chrwdg = add((CharWnd)child, Utils.getprefc("wndc-chr", new Coord(300, 50)));
+	    chrwdg.reqclose(chrwdg::hide).hide();
+	} else if(place == "craft") {
+	    String cap = "";
+	    final Widget mkwdg = child;
+	    if(mkwdg instanceof Makewindow)
+		cap = ((Makewindow)mkwdg).rcpnm;
+	    if(cap.equals(""))
+		cap = "Crafting";
+	    if(craftwnd != null){
+		craftwnd.setMakewindow(mkwdg);
+	    } else {
+		if(makewnd == null) {
+		    makewnd = add(new CraftWindow(), new Coord(400, 200));
+		}
+		makewnd.add(child);
+		makewnd.pack();
+		makewnd.raise();
+		makewnd.show();
+	    }
+	} else if(place == "buddy") {
+	    zerg.ntab(buddies = (BuddyWnd)child, zerg.kin);
+	} else if(place == "pol") {
+	    zerg.addpol((Polity)child);
+	} else if(place == "chat") {
+	    chat.addchild(child);
+	} else if(place == "party") {
+	    add(child, portrait.pos("bl").adds(0, 10));
+	} else if(place == "meter") {
+	    int x = (meters.size() % 3) * (IMeter.fsz.x + UI.scale(5));
+	    int y = (meters.size() / 3) * (IMeter.fsz.y + UI.scale(2));
+	    Widget meterwdg = child;
+	    if(child instanceof IMeter) {
+		meterwdg = new MeterWidgetBox(metername((IMeter)child, "meter-" + meters.size()), (IMeter)child);
+	    } else if(child instanceof Speedget) {
+		meterwdg = new MovableWidgetBox("speedget", child);
+	    }
+	    add(meterwdg, portrait.rootpos().sub(rootpos()).add(portrait.sz.x + UI.scale(10) + x, y));
+	    meters.add(child);
+	    updcmeters();
+	} else if(place == "buff") {
+	    buffs.addchild(child);
+	} else if(place == "qq") {
+	    if(qqview != null)
+		qqview.reqdestroy();
+	    final Widget cref = qqview = child;
+	    questPanel = add(new MovableWidgetBox("quest-objectives", cref) {
+		    public void cdestroy(Widget ch) {
+			qqview = null;
+			destroy();
+		    }
+		}, new Coord(10, mapmenupanel.c.y - child.sz.y - UI.scale(20)));
+	} else if(place == "misc") {
+	    Coord c;
+	    int a = 1;
+	    if(args[a] instanceof Coord) {
+		c = (Coord)args[a++];
+	    } else if(args[a] instanceof Coord2d) {
+		c = ((Coord2d)args[a++]).mul(new Coord2d(this.sz.sub(child.sz))).round();
+		c = optplacement(child, c);
+	    } else if(args[a] instanceof String) {
+		c = relpos((String)args[a++], child, (args.length > a) ? ((Object[])args[a++]) : new Object[] {}, 0);
+	    } else {
+		throw(new UI.UIException("Illegal gameui child", place, args));
+	    }
+	    while(a < args.length) {
+		Object opt = args[a++];
+		if(opt instanceof Object[]) {
+		    Object[] opta = (Object[])opt;
+		    switch((String)opta[0]) {
+		    case "id":
+			String wndid = (String)opta[1];
+			if(child instanceof Window) {
+			    c = Utils.getprefc(String.format("wndc-misc/%s", (String)opta[1]), c);
+			    if(!wndids.containsKey(wndid)) {
+				c = fitwdg(child, c);
+				wndids.put(wndid, (Window)child);
+			    } else {
+				c = optplacement(child, c);
+			    }
+			}
+			break;
+		    case "obj":
+			if(child instanceof Window) {
+			    ((Window)child).settrans(new GobTrans(map, Utils.uiv(opta[1])));
+			}
+			break;
+		    }
+		}
+	    }
+	    if(child instanceof Speedget)
+		child = new MovableWidgetBox("speedget", child);
+	    add(child, c);
+	} else if(place == "abt") {
+	    add(child, Coord.z);
+	} else {
+	    throw(new UI.UIException("Illegal gameui child", place, args));
+	}
+    }
+
+    public static class GobTrans implements Window.Transition<GobTrans.Anim, GobTrans.Anim> {
+	public static final double time = 0.1;
+	public final MapView map;
+	public final long gobid;
+
+	public GobTrans(MapView map, long gobid) {
+	    this.map = map;
+	    this.gobid = gobid;
+	}
+
+	private Coord oc() {
+	    Gob gob = map.ui.sess.glob.oc.getgob(gobid);
+	    if(gob == null)
+		return(null);
+	    Location.Chain loc = Utils.el(gob.getloc());
+	    if(loc == null)
+		return(null);
+	    return(map.screenxf(loc.fin(Matrix4f.id).mul4(Coord3f.o).invy()).round2());
+	}
+
+	public class Anim extends Window.NormAnim {
+	    public final Window wnd;
+	    private Coord oc;
+
+	    public Anim(Window wnd, boolean hide, Anim from) {
+		super(time, from, hide);
+		this.wnd = wnd;
+		this.oc = wnd.c.add(wnd.sz.div(2));
+	    }
+
+	    public void draw(GOut g, Tex tex) {
+		GOut pg = g.reclipl(wnd.c.inv(), wnd.parent.sz);
+		Coord cur = oc();
+		if(cur != null)
+		    this.oc = cur;
+		Coord sz = tex.sz();
+		double na = Utils.smoothstep(this.na);
+		pg.chcolor(255, 255, 255, (int)(na * 255));
+		double fac = 1.0 - na;
+		Coord c = this.oc.sub(sz.div(2)).mul(1.0 - na).add(wnd.c.mul(na));
+		pg.image(tex, c.add((int)(sz.x * fac * 0.5), (int)(sz.y * fac * 0.5)),
+			 Coord.of((int)(sz.x * (1.0 - fac)), (int)(sz.y * (1.0 - fac))));
+	    }
+	}
+
+	public Anim show(Window wnd, Anim hide) {return(new Anim(wnd, false, hide));}
+	public Anim hide(Window wnd, Anim show) {return(new Anim(wnd, true,  show));}
+    }
+
+    public void cdestroy(Widget w) {
+	if(w instanceof Window) {
+	    String wndid = wndids.reverse().get((Window)w);
+	    if(wndid != null) {
+		wndids.remove(wndid);
+		Utils.setprefc(String.format("wndc-misc/%s", wndid), w.c);
+	    }
+	}
+	if(w instanceof GItem) {
+	    Collection<DraggedItem> hand = handHidden ? handSave : this.hand;
+	    for(Iterator<DraggedItem> i = hand.iterator(); i.hasNext();) {
+		DraggedItem di = i.next();
+		if(di.item == w) {
+		    i.remove();
+		    updhand();
+		    synchronized (heldNotifier) { heldNotifier.notifyAll(); }
+		}
+	    }
+	} else if(w == chrwdg) {
+	    chrwdg = null;
+	}
+	if(w instanceof MeterWidgetBox) {
+	    meters.remove(((MeterWidgetBox)w).meter);
+	    cmeters.remove(((MeterWidgetBox)w).meter);
+	} else {
+	    meters.remove(w);
+	    cmeters.remove(w);
+	}
+	updcmeters();
+    }
+    
+    public void placemmap() {
+	if(mmap == null) {return;}
+	if(mmap.parent != null) {
+	    mmap.unlink();
+	}
+	mmap.sz = UI.scale(133, 133);
+	blpanel.add(mmap, minimapc);
+	if (!CFG.VANILLA_CHAT.get() && !CFG.SHOW_MINIMAP_ON_START.get()) {
+	    blpanel.cshow(false);
+	    mapmenupanel.cshow(true);
+	    updfold(true);
+	    blpanel.presize();
+	} else
+	    blpanel.show();
+	mapmenupanel.presize();
+	mmap.lower();
+    }
+
+    public static class Progress extends Widget {
+	private static final Resource.Anim progt = Resource.local().loadwait("gfx/hud/prog").layer(Resource.animc);
+	public double prog;
+	private TexI curi;
+
+	public Progress(double prog) {
+	    super(progt.f[0][0].ssz);
+	    set(prog);
+	}
+
+	public void set(double prog) {
+	    int fr = Utils.clip((int)Math.floor(prog * progt.f.length), 0, progt.f.length - 2);
+	    int bf = Utils.clip((int)(((prog * progt.f.length) - fr) * 255), 0, 255);
+	    WritableRaster buf = PUtils.imgraster(progt.f[fr][0].ssz);
+	    PUtils.blit(buf, progt.f[fr][0].scaled().getRaster(), Coord.z);
+	    PUtils.blendblit(buf, progt.f[fr + 1][0].scaled().getRaster(), Coord.z, bf);
+	    
+	    BufferedImage img = PUtils.rasterimg(buf);
+	    BufferedImage txt = Text.renderstroked(String.format("%d%%", (int) (100 * prog))).img;
+	    img.getGraphics().drawImage(txt, (img.getWidth() - txt.getWidth()) / 2, UI.scale(8) - txt.getHeight() / 2, null);
+	    
+	    if(this.curi != null)
+		this.curi.dispose();
+	    this.curi = new TexI(img);
+
+	    double d = Math.abs(prog - this.prog);
+	    int dec = Math.max(0, (int)Math.round(-Math.log10(d)) - 2);
+	    this.tooltip = String.format("%." + dec + "f%%", prog * 100);
+	    this.prog = prog;
+	}
+
+	public void draw(GOut g) {
+	    g.image(curi, Coord.z);
+	}
+
+	public boolean checkhit(Coord c) {
+	    return(Utils.checkhit(curi.back, c, 10));
+	}
+    }
+
+    public void draw(GOut g) {
+	int beltoffset = (CFG.VANILLA_CHAT.get() ? 0 : blpw);
+	beltwdg.c = new Coord(chat.c.x + beltoffset, Math.min(chat.c.y - beltwdg.sz.y, sz.y - beltwdg.sz.y));
+	super.draw(g);
+	int by = sz.y;
+	if(chat.visible())
+	    by = Math.min(by, chat.c.y);
+	if(beltwdg.visible())
+	    by = Math.min(by, beltwdg.c.y);
+	if(cmdline != null) {
+	    drawcmd(g, new Coord(blpw + UI.scale(10), by -= UI.scale(20)));
+	} else if(lastmsg != null) {
+	    if((Utils.rtime() - msgtime) > 3.0) {
+		lastmsg = null;
+	    } else {
+		g.chcolor(0, 0, 0, 192);
+		g.frect(new Coord(blpw + UI.scale(8), by - UI.scale(22)), lastmsg.sz().add(UI.scale(4), UI.scale(4)));
+		g.chcolor();
+		g.image(lastmsg.tex(), new Coord(blpw + UI.scale(10), by -= UI.scale(20)));
+	    }
+	}
+	if(!chat.visible()) {
+	    chat.drawsmall(g, new Coord(blpw + UI.scale(10), by), UI.scale(100));
+	}
+    }
+    
+    private String iconconfname() {
+	StringBuilder buf = new StringBuilder();
+	buf.append("data/mm-icons-2");
+	if(genus != null)
+	    buf.append("/" + genus);
+	if(ui.sess != null)
+	    buf.append("/" + ui.sess.user.prsname());
+	return(buf.toString());
+    }
+
+    private GobIcon.Settings loadiconconf() {
+	String nm = iconconfname();
+	try {
+	    return(GobIcon.Settings.load(ui, nm));
+	} catch(Exception e) {
+	    new Warning(e, "could not load icon-conf").issue();
+	}
+	return(new GobIcon.Settings(ui, nm));
+    }
+
+    public class CornerMap extends MiniMap implements Console.Directory {
+	public CornerMap(Coord sz, MapFile file) {
+	    super(sz, file);
+	    follow(new MapLocator(map));
+	}
+
+	public boolean dragp(int button) {
+	    return(false);
+	}
+
+	public boolean clickmarker(DisplayMarker mark, Location loc, int button, boolean press) {
+	    if(mark.m instanceof SMarker) {
+		Gob gob = MarkerID.find(ui.sess.glob.oc, (SMarker)mark.m);
+		if(gob != null)
+		    mvclick(map, null, loc, gob, button);
+	    }
+	    return(false);
+	}
+
+	public boolean clickicon(DisplayIcon icon, Location loc, int button, boolean press) {
+	    if(press) {
+		mvclick(map, null, loc, icon.gob, button);
+		return(true);
+	    }
+	    return(false);
+	}
+
+	public boolean clickloc(Location loc, int button, boolean press) {
+	    if(press) {
+		mvclick(map, null, loc, null, button);
+		return(true);
+	    }
+	    return(false);
+	}
+
+	public void draw(GOut g) {
+	    g.image(bg, Coord.z, UI.scale(bg.sz()));
+	    super.draw(g);
+	}
+
+	protected boolean allowzoomout() {
+	    /* XXX? The corner-map has the property that its size
+	     * makes it so that the one center grid will very commonly
+	     * touch at least one border, making indefinite zoom-out
+	     * possible. That will likely cause more problems than
+	     * it's worth given the resulting workload in generating
+	     * zoomgrids for very high zoom levels, especially when
+	     * done by mistake, so lock to an arbitrary five levels of
+	     * zoom, at least for now. */
+	    if(zoomlevel >= 5)
+		return(false);
+	    return(super.allowzoomout());
+	}
+	private Map<String, Console.Command> cmdmap = new TreeMap<String, Console.Command>();
+	{
+	    cmdmap.put("rmseg", new Console.Command() {
+		    public void run(Console cons, String[] args) {
+			MiniMap.Location loc = curloc;
+			if(loc != null) {
+			    try(Locked lk = new Locked(file.lock.writeLock())) {
+				file.segments.remove(loc.seg.id);
+			    }
+			}
+		    }
+		});
+	}
+	public Map<String, Console.Command> findcmds() {
+	    return(cmdmap);
+	}
+    }
+
+    private Coord lastsavegrid = null;
+    private int lastsaveseq = -1;
+    private void mapfiletick() {
+	MapView map = this.map;
+	MiniMap mmap = this.mmap;
+	if((map == null) || (mmap == null))
+	    return;
+	Gob pl = ui.sess.glob.oc.getgob(map.plgob);
+	Coord gc;
+	if(pl == null)
+	    gc = map.cc.floor(MCache.tilesz).div(MCache.cmaps);
+	else
+	    gc = pl.rc.floor(MCache.tilesz).div(MCache.cmaps);
+	try {
+	    MCache.Grid grid = ui.sess.glob.map.getgrid(gc);
+	    if((grid != null) && (!Utils.eq(gc, lastsavegrid) || (lastsaveseq != grid.seq))) {
+		mmap.file.update(ui.sess.glob.map, gc);
+		lastsavegrid = gc;
+		lastsaveseq = grid.seq;
+	    }
+	} catch(Loading l) {
+	}
+    }
+
+    private double lastwndsave = 0;
+    public void tick(double dt) {
+	super.tick(dt);
+	double now = Utils.rtime();
+	if(now - lastwndsave > 60) {
+	    savewndpos();
+	    lastwndsave = now;
+	}
+	double idle = now - ui.lastevent;
+	if(!afk && (idle > 300)) {
+	    afk = true;
+	    wdgmsg("afk");
+	} else if(afk && (idle <= 300)) {
+	    afk = false;
+	}
+	mapfiletick();
+    }
+    
+    public void uimsg(String msg, Object... args) {
+	if(msg == "err") {
+	    String err = (String)args[0];
+	    Reactor.EMSG.onNext(err);
+	    ui.error(err);
+	} else if(msg == "msg") {
+	    String text = (String)args[0];
+	    Reactor.IMSG.onNext(text);
+	    ui.msg(text);
+	} else if(msg == "prog") {
+	    if(args.length > 0) {
+		double p = Utils.dv(args[0]) / 100.0;
+		if(prog == null)
+		    prog = adda(new Progress(p), 0.5, 0.35);
+		else
+		    prog.set(p);
+	    } else {
+		if(prog != null) {
+		    prog.reqdestroy();
+		    prog = null;
+		}
+	    }
+	} else if(msg == "setbelt") {
+	    int slot = Utils.iv(args[0]);
+	    if(args.length < 2) {
+		belt[slot] = null;
+	    } else {
+		Indir<Resource> res = ui.sess.getresv(args[1]);
+		Message sdt = Message.nil;
+		if(args.length > 2)
+		    sdt = new MessageBuf((byte[])args[2]);
+		ResData rdt = new ResData(res, sdt);
+		ui.sess.glob.loader.defer(() -> {
+			belt[slot] = mkbeltslot(slot, rdt);
+		    }, null);
+	    }
+	} else if(msg == "setbelt2") {
+	    int slot = Utils.iv(args[0]);
+	    if(args.length < 2) {
+		belt[slot] = null;
+	    } else {
+		switch((String)args[1]) {
+		case "p": {
+		    Object id = args[2];
+		    belt[slot] = new PagBeltSlot(slot, menu.paginafor(id, null));
+		    break;
+		}
+		case "r": {
+		    Indir<Resource> res = ui.sess.getresv(args[2]);
+		    ui.sess.glob.loader.defer(() -> {
+			    belt[slot] = new PagBeltSlot(slot, PagBeltSlot.resolve(menu, res));
+			}, null);
+		    break;
+		}
+		case "d": {
+		    Indir<Resource> res = ui.sess.getresv(args[2]);
+		    Message sdt = Message.nil;
+		    if(args.length > 2)
+			sdt = new MessageBuf((byte[])args[3]);
+		    belt[slot] = new ResBeltSlot(slot, new ResData(res, sdt));
+		    break;
+		}
+		case "s": {
+		    belt[slot] = ToolBelt.makeCustom(this, slot, (String) args[2]);
+		}
+		}
+	    }
+	} else if(msg == "polowner") {
+	    int id = Utils.iv(args[0]);
+	    String o = (String)args[1];
+	    boolean n = Utils.bv(args[2]);
+	    if(o != null)
+		o = o.intern();
+	    String cur = polowners.get(id);
+	    if(map != null) {
+		if((o != null) && (cur == null)) {
+		    if(n)
+			map.setpoltext(id, "Entering " + o);
+		} else if((o == null) && (cur != null)) {
+		    map.setpoltext(id, "Leaving " + cur);
+		}
+	    }
+	    polowners.put(id, o);
+	} else if(msg == "showhelp") {
+	    Indir<Resource> res = ui.sess.getresv(args[0]);
+	    if(help == null) {
+		(help = adda(new HelpWnd(res), 0.5, 0.25)).reqclose(() -> {
+		    if(help != null)
+		        help.reqdestroy();
+		    help = null;
+		});
+	    } else {
+		help.set(res);
+	    }
+	} else if(msg == "map-mark") {
+	    long gobid = UINT.of(args[0]);
+	    UID oid = UNIQID.of(args[1]);
+	    Indir<Resource> res = ui.sess.getresv(args[2]);
+	    String nm = STR.of(args[3]);
+	    byte[] data = BYTES.opt(args, 4).or(new byte[0]);
+	    if(mapfile != null)
+		mapfile.markobj(gobid, oid, res, data, nm);
+	} else if(msg == "map-icons") {
+	    GobIcon.Settings conf = this.iconconf;
+	    int tag = Utils.iv(args[0]);
+	    if(args.length < 2) {
+		if(conf.tag != tag)
+		    wdgmsg("map-icons", conf.tag);
+	    } else {
+		conf.receive(args);
+	    }
+	} else {
+	    super.uimsg(msg, args);
+	}
+    }
+
+    private static final int fitmarg = UI.scale(100);
+    private Coord fitwdg(Widget wdg, Coord c) {
+	Coord ret = new Coord(c);
+	ret.x = Math.max(ret.x, Math.min(0, fitmarg - wdg.sz.x));
+	ret.y = Math.max(ret.y, Math.min(0, fitmarg - wdg.sz.y));
+	ret.x = Math.min(ret.x, sz.x - Math.min(fitmarg, wdg.sz.x));
+	ret.y = Math.min(ret.y, sz.y - Math.min(fitmarg, wdg.sz.y));
+	return(ret);
+    }
+
+    private void fitwdg(Widget wdg) {
+	wdg.c = fitwdg(wdg, wdg.c);
+    }
+
+    private boolean wndstate(Window wnd) {
+	if(wnd == null)
+	    return(false);
+	return(wnd.visible());
+    }
+
+    private void togglewnd(Window wnd) {
+	if(wnd != null) {
+	    if(wnd.show(!wnd.visible())) {
+		wnd.raise();
+		fitwdg(wnd);
+		setfocus(wnd);
+	    }
+	}
+    }
+
+    public static class MenuButton extends IButton {
+	MenuButton(String base, KeyBinding gkey, String tooltip) {
+	    super("gfx/hud/" + base, "", "-d", "-h");
+	    invisibleKeys = true;
+	    setgkey(gkey);
+	    allowGlobalKeysWhenHidden(true);
+	    settip(tooltip);
+	}
+    }
+
+    public static class MenuCheckBox extends ICheckBox {
+	MenuCheckBox(String base, KeyBinding gkey, String tooltip) {
+	    super("gfx/hud/" + base, "", "-d", "-h", "-dh");
+	    invisibleKeys = true;
+	    setgkey(gkey);
+	    allowGlobalKeysWhenHidden(true);
+	    settip(tooltip);
+	}
+    }
+
+    public static final KeyBinding kb_inv = KeyBinding.get("inv", KeyMatch.forcode(KeyEvent.VK_TAB, 0));
+    public static final KeyBinding kb_equ = KeyBinding.get("equ", KeyMatch.forchar('E', KeyMatch.C));
+    public static final KeyBinding kb_chr = KeyBinding.get("chr", KeyMatch.forchar('T', KeyMatch.C));
+    public static final KeyBinding kb_bud = KeyBinding.get("bud", KeyMatch.forchar('B', KeyMatch.C));
+    public static final KeyBinding kb_opt = KeyBinding.get("opt", KeyMatch.forchar('O', KeyMatch.C));
+    private static final Tex menubg = Resource.loadtex("gfx/hud/rbtn-bg");
+    public class MainMenu extends Widget {
+	public MainMenu() {
+	    super(menubg.sz());
+	    add(new MenuCheckBox("rbtn-inv", kb_inv, "Inventory"), 0, 0).state(() -> wndstate(invwnd)).click(() -> togglewnd(invwnd));
+	    add(new MenuCheckBox("rbtn-equ", kb_equ, "Equipment"), 0, 0).state(() -> wndstate(equwnd)).click(() -> togglewnd(equwnd));
+	    add(new MenuCheckBox("rbtn-chr", kb_chr, "Character Sheet"), 0, 0).state(() -> wndstate(chrwdg)).click(() -> togglewnd(chrwdg));
+	    add(new MenuCheckBox("rbtn-bud", kb_bud, "Kith & Kin"), 0, 0).state(() -> wndstate(zerg)).click(() -> togglewnd(zerg));
+	    add(new MenuCheckBox("rbtn-opt", kb_opt, "Options"), 0, 0).state(() -> wndstate(opts)).click(() -> togglewnd(opts));
+	}
+
+	public void draw(GOut g) {
+	    g.image(menubg, Coord.z);
+	    super.draw(g);
+	}
+    }
+    
+    public static final KeyBinding kb_map = KeyBinding.get("map", KeyMatch.forchar('A', KeyMatch.C));
+    public static final KeyBinding kb_claim = KeyBinding.get("ol-claim", KeyMatch.nil);
+    public static final KeyBinding kb_vil = KeyBinding.get("ol-vil", KeyMatch.nil);
+    public static final KeyBinding kb_rlm = KeyBinding.get("ol-rlm", KeyMatch.nil);
+    public static final KeyBinding kb_ico = KeyBinding.get("map-icons", KeyMatch.nil);
+    private static final Tex mapmenubg = Resource.loadtex("gfx/hud/lbtn-bg");
+    public class MapMenu extends Widget {
+	private void toggleol(String tag, boolean a) {
+	    if(map != null) {
+		if(a)
+		    map.enol(tag);
+		else
+		    map.disol(tag);
+	    }
+	}
+
+	public MapMenu() {
+	    super(mapmenubg.sz());
+	    add(new MenuCheckBox("lbtn-claim", kb_claim, "Display personal claims"), 0, 0).changed(a -> toggleol("cplot", a));
+	    add(new MenuCheckBox("lbtn-vil", kb_vil, "Display village claims"), 0, 0).changed(a -> toggleol("vlg", a));
+	    add(new MenuCheckBox("lbtn-rlm", kb_rlm, "Display provinces"), 0, 0).changed(a -> toggleol("prov", a));
+	    add(new MenuCheckBox("lbtn-map", kb_map, "Map")).state(() -> wndstate(mapfile)).click(() -> {
+		togglewnd(mapfile);
+		if(mapfile != null)
+		    Utils.setprefb("wndvis-map", mapfile.visible());
+	    });
+	    add(new MenuCheckBox("lbtn-ico", kb_ico, "Icon settings"), 0, 0).state(() -> wndstate(iconwnd)).click(() -> {
+		    if(iconconf == null)
+			return;
+		    if(iconwnd == null) {
+			iconwnd = new GobIcon.SettingsWindow(iconconf).reqclose(() -> {
+			    if(iconwnd != null)
+				iconwnd.reqdestroy();
+			    iconwnd = null;
+			});
+			fitwdg(GameUI.this.add(iconwnd, Utils.getprefc("wndc-icon", new Coord(200, 200))));
+		    } else {
+			iconwnd.reqclose();
+		    }
+		});
+	}
+
+	public void draw(GOut g) {
+	    g.image(mapmenubg, Coord.z);
+	    super.draw(g);
+	}
+    }
+    
+    public static final KeyBinding kb_shoot = KeyBinding.get("screenshot", KeyMatch.forchar('S', KeyMatch.C));
+    public static final KeyBinding kb_chat = KeyBinding.get("chat-toggle", KeyMatch.forchar('C', KeyMatch.C));
+    public static final KeyBinding kb_hide = KeyBinding.get("ui-toggle", KeyMatch.nil);
+    public static final KeyBinding kb_logout = KeyBinding.get("logout", KeyMatch.nil);
+    public static final KeyBinding kb_switchchr = KeyBinding.get("logout-cs", KeyMatch.nil);
+    public boolean globtype(GlobKeyEvent ev) {
+	if(ev.c == ':') {
+	    entercmd();
+	    return(true);
+	} else if(kb_shoot.key().match(ev) && (Screenshooter.screenurl.get() != null)) {
+	    Screenshooter.take(this, Screenshooter.screenurl.get());
+	    return(true);
+	} else if(kb_hide.key().match(ev)) {
+	    toggleui();
+	    return(true);
+	} else if(kb_logout.key().match(ev)) {
+	    act("lo");
+	    return(true);
+	} else if(kb_switchchr.key().match(ev)) {
+	    act("lo", "cs");
+	    return(true);
+	} else if(kb_chat.key().match(ev)) {
+	    toggleChat();
+	    return(true);
+	} else if((ev.c == 27) && (map != null) && !map.hasfocus) {
+	    setfocus(map);
+	    return(true);
+	}
+	return(super.globtype(ev));
+    }
+
+    private int uimode = 1;
+    public void toggleui(int mode) {
+	Hidepanel[] panels = {blpanel, brpanel, ulpanel, umpanel, urpanel, menupanel, mapmenupanel};
+	switch(uimode = mode) {
+	case 0:
+	    for(Hidepanel p : panels)
+		p.mshow(true);
+	    break;
+	case 1:
+	    for(Hidepanel p : panels)
+		p.mshow();
+	    break;
+	case 2:
+	    for(Hidepanel p : panels)
+		p.mshow(false);
+	    break;
+	}
+    }
+
+    public void resetui() {
+	Hidepanel[] panels = {blpanel, brpanel, ulpanel, umpanel, urpanel, menupanel, mapmenupanel};
+	for(Hidepanel p : panels)
+	    p.cshow(p.tvis);
+	uimode = 1;
+    }
+
+    public void toggleui() {
+	toggleui((uimode + 1) % 3);
+    }
+
+    public void resize(Coord sz) {
+	super.resize(sz);
+	resizeLayout(sz);
+    }
+    
+    public void resizeLayout(Coord sz) {
+	if (CFG.VANILLA_CHAT.get()) {
+	    chat.resize(sz.x - blpw - brpw);
+	    chat.move(new Coord(blpw, sz.y));
+	}
+	else {
+	    chat.resize(UI.scale(600));
+	    chat.move(new Coord(0, sz.y));
+	}
+	if(map != null)
+	    map.resize(sz);
+	if(prog != null)
+	    prog.move(sz.sub(prog.sz).mul(0.5, 0.35));
+	beltwdg.c = new Coord(blpw + UI.scale(10), sz.y - beltwdg.sz.y - UI.scale(5));
+	statuswdg.c = new Coord(sz.x/2 + UI.scale(70), UI.scale(10));
+	timewdg.c = new Coord(sz.x/2 - UI.scale(270), UI.scale(10));
+    }
+    
+    public void presize() {
+	resize(parent.sz);
+    }
+    
+    public static interface LogMessage extends UI.Notice {
+	public ChatUI.Channel.Message logmessage();
+    }
+
+    public boolean msg(UI.Notice msg) {
+	if(msg.handler(this))
+	    return(true);
+	ChatUI.Channel.Message logged;
+	if(msg instanceof LogMessage)
+	    logged = ((LogMessage)msg).logmessage();
+	else
+	    logged = new ChatUI.Channel.SimpleMessage(msg.message(), msg.color());
+	msgtime = Utils.rtime();
+	lastmsg = RootWidget.msgfoundry.render(msg.message(), msg.color());
+	syslog.append(logged);
+	ui.sfxrl(msg.sfx());
+	return(true);
+    }
+
+    public void error(String msg) {
+	ui.error(msg);
+    }
+    
+    public void msg(String msg, MsgType type) {
+	msg(new UI.NoticeEvent(new UI.SimpleMessage(msg, type.color, type.sfx)));
+    }
+    
+    public enum MsgType {
+	INFO(Color.WHITE, UI.InfoMessage.sfx), GOOD(Color.GREEN), BAD(Color.RED),
+	ERROR(new Color(192, 0, 0), new Color(255, 0, 0), UI.ErrorMessage.sfx);
+	
+	public final Color color, logcol;
+	public final Audio.Clip sfx;
+	
+	MsgType(Color color) {
+	    this(color, color, null);
+	}
+	
+	MsgType(Color color, Color logcol, Audio.Clip sfx) {
+	    this.logcol = logcol;
+	    this.color = color;
+	    this.sfx = sfx;
+	}
+	
+	MsgType(Color color, Audio.Clip sfx) {
+	    this(color, color, sfx);
+	}
+    }
+    
+    private final Map<Marker, Widget> trackedMarkers = new HashMap<>();
+    public void track(Marker marker) {
+	untrack(marker);
+	Widget wdg = new Pointer(marker);
+	trackedMarkers.put(marker, wdg);
+	ui.gui.add(wdg);
+    }
+    
+    public void untrack(Marker marker) {
+	Widget wdg = trackedMarkers.remove(marker);
+	if(wdg != null) {
+	    if(marker instanceof MapWnd2.GobMarker){
+		ui.gui.mapfile.untrack(((MapWnd2.GobMarker) marker).gobid);
+	    }
+	    wdg.reqdestroy();
+	}
+    }
+    
+    private void untrackAllMarkers() {
+	Collection<Marker> markers = new ArrayList<>(trackedMarkers.keySet());
+	markers.forEach(this::untrack);
+    }
+    
+    public boolean isTracked(Marker marker) {
+	return trackedMarkers.containsKey(marker);
+    }
+    
+    public Optional<MiniMap.IPointer> findPointer(String name) {
+	final long curSeg = mapfile.playerSegmentId();
+	return ui.gui.children().stream()
+	    .filter(widget -> widget instanceof MiniMap.IPointer)
+	    .map(widget -> (MiniMap.IPointer) widget)
+	    .filter(p -> p.tc(curSeg) != null)
+	    .filter(p -> Objects.equals(name, p.name()))
+	    .findFirst();
+    }
+    
+    public boolean isInCombat() {
+	return fv != null && !fv.lsrel.isEmpty();
+    }
+    
+    public IMeter getIMeter(String name) {
+	for (Widget meter : this.meters) {
+	    if(!(meter instanceof IMeter)) {continue;}
+	    IMeter im = (IMeter) meter;
+	    
+	    try {
+		Resource res = im.bg.get();
+		if(res != null && res.basename().equals(name)) {
+		    return im;
+		}
+	    } catch (Loading ignored) {}
+	}
+	
+	return null;
+    }
+
+    public void act(String... args) {
+	wdgmsg("act", (Object[])args);
+    }
+
+    public void act(int mods, Coord mc, Gob gob, String... args) {
+	int n = args.length;
+	Object[] al = new Object[n];
+	System.arraycopy(args, 0, al, 0, n);
+	if(mc != null) {
+	    al = Utils.extend(al, al.length + 2);
+	    al[n++] = mods;
+	    al[n++] = mc;
+	    if(gob != null) {
+		al = Utils.extend(al, al.length + 2);
+		al[n++] = (int)gob.id;
+		al[n++] = gob.rc;
+	    }
+	}
+	wdgmsg("act", al);
+    }
+    
+    public class FKeyBelt extends Belt implements DTarget, DropTarget {
+	public final int beltkeys[] = {KeyEvent.VK_F1, KeyEvent.VK_F2, KeyEvent.VK_F3, KeyEvent.VK_F4,
+				       KeyEvent.VK_F5, KeyEvent.VK_F6, KeyEvent.VK_F7, KeyEvent.VK_F8,
+				       KeyEvent.VK_F9, KeyEvent.VK_F10, KeyEvent.VK_F11, KeyEvent.VK_F12};
+	public int curbelt = 0;
+
+	public FKeyBelt() {
+	    super(UI.scale(new Coord(450, 34)));
+	}
+
+	private Coord beltc(int i) {
+	    return(new Coord((((invsq.sz().x + UI.scale(2)) * i) + (10 * (i / 4))), 0));
+	}
+    
+	public int beltslot(Coord c) {
+	    for(int i = 0; i < 12; i++) {
+		if(c.isect(beltc(i), invsq.sz()))
+		    return(i + (curbelt * 12));
+	    }
+	    return(-1);
+	}
+    
+	public void draw(GOut g) {
+	    for(int i = 0; i < 12; i++) {
+		int slot = i + (curbelt * 12);
+		Coord c = beltc(i);
+		g.image(invsq, beltc(i));
+		try {
+		    if(belt[slot] != null)
+			belt[slot].draw(g.reclip(c.add(UI.scale(1), UI.scale(1)), invsq.sz().sub(UI.scale(2), UI.scale(2))));
+		} catch(Loading e) {}
+		g.chcolor(156, 180, 158, 255);
+		FastText.aprintf(g, c.add(invsq.sz().sub(UI.scale(2), 0)), 1, 1, "F%d", i + 1);
+		g.chcolor();
+	    }
+	}
+	
+	public boolean globtype(GlobKeyEvent ev) {
+	    //skip matching if CTRL pressed to not clash with global hotkeys
+	    if(ev.mods == KeyMatch.C) {return super.globtype(ev);}
+	    boolean M = (ev.mods & KeyMatch.M) != 0;
+	    for(int i = 0; i < beltkeys.length; i++) {
+		if(ev.code == beltkeys[i]) {
+		    if(M) {
+			curbelt = i;
+			return(true);
+		    } else {
+			keyact(i + (curbelt * 12));
+			return(true);
+		    }
+		}
+	    }
+	    return(super.globtype(ev));
+	}
+    }
+    
+    private static final Tex nkeybg = Resource.loadtex("gfx/hud/hb-main");
+    public class NKeyBelt extends Belt {
+	public int curbelt = 0;
+	final Coord pagoff = UI.scale(new Coord(5, 25));
+
+	public NKeyBelt() {
+	    super(nkeybg.sz());
+	    adda(new IButton("gfx/hud/hb-btn-chat", "", "-d", "-h") {
+		    Tex glow;
+		    {
+			this.tooltip = RichText.render("Chat ($col[255,255,0]{Ctrl+C})", 0);
+			glow = new TexI(PUtils.rasterimg(PUtils.blurmask(up.getRaster(), UI.scale(2), UI.scale(2), Color.WHITE)));
+		    }
+
+		    public void click() {
+			toggleChat();
+		    }
+	    
+		@Override
+		public Object tooltip(Coord c, Widget prev) {
+		    if(!checkhit(c)) {
+			return null;
+		    }
+		    String tt = "Chat";
+		    
+		    if(kb_chat.key() != KeyMatch.nil) {
+			tt = String.format("%s ($col[255,255,0]{%s})", tt, kb_chat.key().name());
+		    }
+		    return RichText.render(tt, 0);
+		}
+	 
+		public void draw(GOut g) {
+			super.draw(g);
+			Color urg = chat.urgcols[chat.urgency];
+			if(urg != null) {
+			    GOut g2 = g.reclipl2(UI.scale(-4, -4), g.sz().add(UI.scale(4, 4)));
+			    g2.chcolor(urg.getRed(), urg.getGreen(), urg.getBlue(), 128);
+			    g2.image(glow, Coord.z);
+			}
+		    }
+		}, sz, 1, 1);
+	}
+	
+	private Coord beltc(int i) {
+	    return(pagoff.add(UI.scale((36 * i) + (10 * (i / 5))), 0));
+	}
+    
+	public int beltslot(Coord c) {
+	    for(int i = 0; i < 10; i++) {
+		if(c.isect(beltc(i), invsq.sz()))
+		    return(i + (curbelt * 12));
+	    }
+	    return(-1);
+	}
+    
+	public void draw(GOut g) {
+	    g.image(nkeybg, Coord.z);
+	    for(int i = 0; i < 10; i++) {
+		int slot = i + (curbelt * 12);
+		Coord c = beltc(i);
+		g.image(invsq, beltc(i));
+		try {
+		    if(belt[slot] != null) {
+			belt[slot].draw(g.reclip(c.add(UI.scale(1), UI.scale(1)), invsq.sz().sub(UI.scale(2), UI.scale(2))));
+		    }
+		} catch(Loading e) {}
+		g.chcolor(156, 180, 158, 255);
+		FastText.aprintf(g, c.add(invsq.sz().sub(UI.scale(2), 0)), 1, 1, "%d", (i + 1) % 10);
+		g.chcolor();
+	    }
+	    super.draw(g);
+	}
+	
+	public boolean globtype(GlobKeyEvent ev) {
+	    //skip matching if CTRL is pressed to not clash with global hotkeys
+	    if(ev.mods == KeyMatch.C) {return super.globtype(ev);}
+	    if((ev.code < KeyEvent.VK_0) || (ev.code > KeyEvent.VK_9))
+		return(super.globtype(ev));
+	    int i = Utils.floormod(ev.code - KeyEvent.VK_0 - 1, 10);
+	    boolean M = (ev.mods & KeyMatch.M) != 0;
+	    if(M) {
+		curbelt = i;
+	    } else {
+		keyact(i + (curbelt * 12));
+	    }
+	    return(true);
+	}
+    }
+    
+    {
+	String val = Utils.getpref("belttype", "n");
+	if(val.equals("n")) {
+	    beltwdg = add(new NKeyBelt());
+	} else if(val.equals("f")) {
+	    beltwdg = add(new FKeyBelt());
+	} else {
+	    beltwdg = add(new NKeyBelt());
+	}
+    }
+    
+    private void createToolBelts() {
+	ToolBelt toolbelt0 = add(new ToolBelt("Belt0", 132, 4, ToolBelt.FKEYS), 50, 200);
+	toolbelt0.visible = CFG.SHOW_TOOLBELT_0.get();
+	CFG.SHOW_TOOLBELT_0.observe(cfg -> toolbelt0.visible = cfg.get());
+	
+	ToolBelt toolbelt1 = add(new ToolBelt("Belt1", 120, 4, 12), 50, 250);
+	toolbelt1.visible = CFG.SHOW_TOOLBELT_1.get();
+	CFG.SHOW_TOOLBELT_1.observe(cfg -> toolbelt1.visible = cfg.get());
+    }
+    
+    private Map<String, Console.Command> cmdmap = new TreeMap<String, Console.Command>();
+    {
+	cmdmap.put("afk", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    afk = true;
+		    wdgmsg("afk");
+		}
+	    });
+	cmdmap.put("act", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    Object[] ad = new Object[args.length - 1];
+		    System.arraycopy(args, 1, ad, 0, ad.length);
+		    wdgmsg("act", ad);
+		}
+	    });
+	cmdmap.put("belt", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    if(args[1].equals("f")) {
+			beltwdg.destroy();
+			beltwdg = add(new FKeyBelt());
+			Utils.setpref("belttype", "f");
+			resize(sz);
+		    } else if(args[1].equals("n")) {
+			beltwdg.destroy();
+			beltwdg = add(new NKeyBelt());
+			Utils.setpref("belttype", "n");
+			resize(sz);
+		    }
+		}
+	    });
+	cmdmap.put("chrmap", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    Utils.setpref("mapfile/" + chrid, args[1]);
+		}
+	    });
+	cmdmap.put("tool", new Console.Command() {
+		public void run(Console cons, String[] args) {
+		    try {
+			Object[] wargs = new Object[args.length - 2];
+			for(int i = 0; i < wargs.length; i++)
+			    wargs[i] = args[i + 2];
+			add(gettype(args[1]).create(ui, wargs), 200, 200);
+		    } catch(RuntimeException e) {
+			e.printStackTrace(Debug.log);
+		    }
+		}
+	    });
+    }
+    public Map<String, Console.Command> findcmds() {
+	return(cmdmap);
+    }
+}

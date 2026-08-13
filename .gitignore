@@ -1,0 +1,14 @@
+/build
+/bin
+/dist
+/local-config.properties
+/local-boot.properties
+/build.properties
+*~
+out
+/resources/compiled
+/resources/classes
+/.idea
+/.idea/misc.xml
+/MERGE-NOTES.md
+*.class

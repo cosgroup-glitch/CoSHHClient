@@ -1,0 +1,216 @@
+package haven.opt;
+
+import haven.*;
+import me.ender.ui.CFGBox;
+import me.ender.ui.CFGSlider;
+
+import static haven.OptWnd.*;
+
+
+public interface KamiOptPanels {
+
+	static void initMinimapPanel(OptWnd wnd, OptWnd.Panel panel) {
+		int STEP = UI.scale(25);
+		int START;
+		int x, y;
+		int my = 0, tx;
+
+		Widget title = panel.add(new Label("Minimap / Map settings", LBL_FNT), 0, 0);
+		START = title.sz.y + UI.scale(10);
+
+		x = 0;
+		y = START;
+		//first row
+		panel.add(new CFGBox("Enable PVP Map Mode", CFG.PVP_MAP, "Simplyfies the Map towards PVP."), x, y);
+
+		y += STEP;
+		panel.add(new CFGBox("Remove Biome Border from Minimap", CFG.REMOVE_BIOME_BORDER_FROM_MINIMAP), x, y);
+
+		//	y += STEP;
+		//	panel.add(new CFGBox("Show names of party members", CFG.SHOW_PARTY_NAMES), x, y);
+		//
+		//	y += STEP;
+		//	panel.add(new CFGBox("Show names of kinned players", CFG.SHOW_PLAYER_NAME), x, y);
+		//
+		//	y += STEP;
+		//	panel.add(new CFGBox("Show names of red players", CFG.SHOW_RED_NAME), x, y);
+
+		//second row
+		my = Math.max(my, y);
+		x += UI.scale(265);
+		y = START;
+		my = Math.max(my, y);
+
+		panel.add(wnd.new PButton(UI.scale(200), "Back", 27, wnd.main), new Coord(0, my + UI.scale(35)));
+		panel.pack();
+		title.c.x = (panel.sz.x - title.sz.x) / 2;
+	}
+
+	static void initExperimentalPanel(OptWnd wnd, OptWnd.Panel panel) {
+		int STEP = UI.scale(25);
+		int START;
+		int x, y;
+		int my = 0, tx;
+
+		Widget title = panel.add(new Label("Experimental settings", LBL_FNT), 0, 0);
+		START = title.sz.y + UI.scale(10);
+
+		x = 0;
+		y = START;
+		//first row
+		panel.add(new CFGBox("Disable certain remote UI calls", CFG.IGNORE_CERTAIN_REMOTE_UI, "RemoteUI's of the type 'ui/rinit:3' are ignored if the first parameter matches the character name. Prevents the display of Realm invites. Might prevent other things too."), x, y);
+	    
+	    	y += STEP;
+	    	panel.add(new CFGBox("Ignore exceptions", CFG.IGNORE_EXCEPTIONS, "The client contains a couple of porpusefully crafted exceptions that will crash the client. Some of them can be ignored with this enabled."), x, y);
+
+		y += STEP;
+		y += STEP;
+		panel.add(new Label("Performance tuning:"), x, y);
+
+		y += STEP;
+		{
+			Label adpy = new Label.Untranslated("");
+			String[] anames = {"Off", "Skip 1", "Skip 2", "Skip 3"};
+			panel.add(new Label("Animation frame skip"), x, y);
+			y += UI.scale(15);
+			panel.addhlp(new Coord(x, y), UI.scale(5),
+				new HSlider(UI.scale(160), 0, 3, CFG.ANIM_FRAME_SKIP.get()) {
+					protected void added() {dpy();}
+					void dpy() {adpy.settext(anames[this.val]);}
+					public void changed() {
+						CFG.ANIM_FRAME_SKIP.set(this.val);
+						dpy();
+					}
+				},
+				adpy);
+			y += STEP;
+		}
+
+		{
+			Label idpy = new Label.Untranslated("");
+			String[] inames = {"Off", "4/sec", "2/sec", "1/sec"};
+			double[] ivals = {0.0, 0.25, 0.5, 1.0};
+			int curidx = 1;
+			double curval = CFG.GOB_INFO_TICK_INTERVAL.get();
+			for(int i = 0; i < ivals.length; i++) {
+				if(Math.abs(ivals[i] - curval) < 0.01) {curidx = i; break;}
+			}
+			panel.add(new Label("Info overlay update rate"), x, y);
+			y += UI.scale(15);
+			panel.addhlp(new Coord(x, y), UI.scale(5),
+				new HSlider(UI.scale(160), 0, inames.length - 1, curidx) {
+					protected void added() {dpy();}
+					void dpy() {idpy.settext(inames[this.val]);}
+					public void changed() {
+						CFG.GOB_INFO_TICK_INTERVAL.set(ivals[this.val]);
+						dpy();
+					}
+				},
+				idpy);
+			y += STEP;
+		}
+
+		y += STEP;
+		panel.add(new CFGBox("Parallel scene tick", CFG.PARALLEL_TICK, "Runs scene-tick processing across multiple threads. Off = single-threaded (less variance, slower average). Useful when stutters feel worse than baseline FPS."), x, y);
+
+		y += STEP;
+		{
+			Label ddpy = new Label.Untranslated("");
+			String[] dnames = {"Unlimited", "16", "32", "64", "128", "256"};
+			int[] dvals = {0, 16, 32, 64, 128, 256};
+			int curidx = 3;
+			int curval = CFG.GL_DISPOSE_PER_FRAME.get();
+			for(int i = 0; i < dvals.length; i++) {
+				if(dvals[i] == curval) {curidx = i; break;}
+			}
+			panel.add(new Label("GL disposes per frame"), x, y);
+			y += UI.scale(15);
+			panel.addhlp(new Coord(x, y), UI.scale(5),
+				new HSlider(UI.scale(160), 0, dnames.length - 1, curidx) {
+					protected void added() {dpy();}
+					void dpy() {ddpy.settext(dnames[this.val]);}
+					public void changed() {
+						CFG.GL_DISPOSE_PER_FRAME.set(dvals[this.val]);
+						dpy();
+					}
+				},
+				ddpy);
+			y += STEP;
+		}
+
+		y += STEP;
+		panel.add(new CFGBox("Freeze domestic animal animations", CFG.FREEZE_DOMESTIC_ANIM, "Stops animation ticking for domesticated animals. Reduces CPU usage when many animals are on screen."), x, y);
+
+		y += STEP;
+		panel.add(new CFGBox("Hide domestic animals", CFG.HIDE_DOMESTIC_ANIMALS, "Completely hides domesticated animals from rendering. Reduces GPU workload when many animals are on screen."), x, y);
+
+		y += STEP;
+		y += STEP;
+		panel.add(new Label("Troubleshooting:"), x, y);
+
+		y += STEP;
+		panel.add(new Button(UI.scale(200), "Purge cached resources", false).action(() -> purgecache(wnd.ui))
+			  .settip("Deletes the downloaded resource cache. The client redownloads what it needs, so expect a bit of hitching afterwards. Try this if resources fail to load or look wrong.", true), x, y);
+
+		//second row
+		my = Math.max(my, y);
+		x += UI.scale(265);
+		y = START;
+
+
+		my = Math.max(my, y);
+
+		panel.add(wnd.new PButton(UI.scale(200), "Back", 27, wnd.main), new Coord(0, my + UI.scale(35)));
+		panel.pack();
+		title.c.x = (panel.sz.x - title.sz.x) / 2;
+	}
+
+	/* KamiClient: nuke the on-disk resource cache. Doesn't touch what's
+	 * already loaded in memory, so a relog is still the safest way to get a
+	 * clean slate, but this at least gets rid of a bad cached file. */
+	static void purgecache(UI ui) {
+		if(!(ResCache.global instanceof HashDirCache)) {
+			ui.error("There is no resource cache to purge.");
+			return;
+		}
+		HashDirCache cache = (HashDirCache)ResCache.global;
+		Defer.later(() -> {
+			try {
+				int n = cache.purge();
+				synchronized(ui) {
+					ui.msg(String.format("Purged %,d cached resources. Relog to make sure everything gets reloaded.", n));
+				}
+			} catch(Exception e) {
+				synchronized(ui) {
+					ui.error("Could not purge the resource cache: " + e.getMessage());
+				}
+			}
+		}, null);
+	}
+
+	static void initAutomationPanel(OptWnd wnd, OptWnd.Panel panel) {
+		int STEP = UI.scale(25);
+		int START;
+		int x, y;
+		int my = 0, tx;
+
+		Widget title = panel.add(new Label("Automation settings", LBL_FNT), 0, 0);
+		START = title.sz.y + UI.scale(10);
+
+		x = 0;
+		y = START;
+		panel.add(new CFGBox("Enable autodrink", CFG.AUTO_DRINK_ENABLED, "Use action \"drink\" automatically when reaching certain thirst level.", true), x, y);
+
+		y += STEP;
+		y = addSlider(CFG.AUTO_DRINK_THRESHOLD, 0, 100, "Auto drink threshold: %d%%", "Start drinking when stamina drops below this value.", panel, x, y, STEP);
+
+		y += STEP;
+		y = addSlider(CFG.AUTO_DRINK_DELAY, 0, 1000, "Auto drink prevention window: %d ms", "Auto drink will not be triggered repeatedly during this period. Adjust according to your latency.", panel, x, y, STEP);
+
+		my = Math.max(my, y);
+
+		panel.add(wnd.new PButton(UI.scale(200), "Back", 27, wnd.main), new Coord(0, my + UI.scale(35)));
+		panel.pack();
+		title.c.x = (panel.sz.x - title.sz.x) / 2;
+	}
+}

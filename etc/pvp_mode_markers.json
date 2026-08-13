@@ -1,0 +1,21 @@
+[
+  "radar/rowboat",
+  "radar/horse/mare",
+  "radar/horse/stallion",
+  "paginae/bld/wball",
+  "radar/dugout",
+  "gfx/invobjs/rabbit-doe",
+  "gfx/invobjs/rabbit",
+  "gfx/terobjs/mm/boostspeed",
+  "radar/snekkja",
+  "radar/knarr",
+  "radar/mine-hole",
+  "radar/cave-in",
+  "radar/cave-out",
+  "gfx/invobjs/arrow",
+  "gfx/invobjs/rooster",
+  "gfx/invobjs/hen",
+  "gfx/kritter/chicken/icon-chick",
+  "gfx/kritter/squirrel/icon",
+  "gfx/terobjs/mm/thingwall"
+]

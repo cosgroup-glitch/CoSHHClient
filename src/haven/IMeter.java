@@ -1,0 +1,123 @@
+/*
+ *  This file is part of the Haven & Hearth game client.
+ *  Copyright (C) 2009 Fredrik Tolf <fredrik@dolda2000.com>, and
+ *                     Björn Johannessen <johannessen.bjorn@gmail.com>
+ *
+ *  Redistribution and/or modification of this file is subject to the
+ *  terms of the GNU Lesser General Public License, version 3, as
+ *  published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  Other parts of this source tree adhere to other copying
+ *  rights. Please see the file `COPYING' in the root directory of the
+ *  source tree for details.
+ *
+ *  A copy the GNU Lesser General Public License is distributed along
+ *  with the source tree of which this file is a part in the file
+ *  `doc/LPGL-3'. If it is missing for any reason, please see the Free
+ *  Software Foundation's website at <http://www.fsf.org/>, or write
+ *  to the Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+ *  Boston, MA 02111-1307 USA
+ */
+
+package haven;
+
+import java.awt.Color;
+import java.util.*;
+
+public class IMeter extends LayerMeter {
+    public static final Coord off = UI.scale(22, 7);
+    public static final Coord fsz = UI.scale(101, 24);
+    public static final Coord msz = UI.scale(75, 10);
+    public final Indir<Resource> bg;
+    public String tip;
+    private String lastRenderedTip;
+    private Tex tipTex;
+
+    @RName("im")
+    public static class $_ implements Factory {
+	public Widget create(UI ui, Object[] args) {
+	    Indir<Resource> bg = ui.sess.getresv(args[0]);
+	    List<Meter> meters = decmeters(args, 1);
+	    return(new IMeter(bg, meters));
+	}
+    }
+
+    public IMeter(Indir<Resource> bg, List<Meter> meters) {
+	super(fsz);
+	this.bg = bg;
+	set(meters);
+    }
+
+    @Override
+    public Widget settip(String text) {
+	tip = text;
+	return super.settip(text);
+    }
+
+    /* KamiClient: take the server-pushed tip ("Hit Points: 250/300/333", "75",
+     * "7500/10000", ...), strip the label, drop HHP from HP ("SHP / MHP" only),
+     * and overlay it centred on the bar. Cribbed the approach from Hurricane. */
+    private String formatTip(String t) {
+	if(t == null || t.isEmpty()) return null;
+	String value = t;
+	int colon = value.indexOf(':');
+	if(colon >= 0) value = value.substring(colon + 1);
+	value = value.replaceAll("\\(.+?\\)", "").trim();
+	if(value.contains("/")) {
+	    String[] parts = value.split("/");
+	    if(parts.length >= 2) {
+		// HP: SHP/HHP/MHP, sparring adds a 4th. Show SHP / MHP.
+		value = parts[0].trim() + " / " + parts[parts.length - 1].trim();
+	    }
+	}
+	return value;
+    }
+
+    private Tex tipTex() {
+	if(!java.util.Objects.equals(tip, lastRenderedTip)) {
+	    if(tipTex != null) {tipTex.dispose(); tipTex = null;}
+	    String formatted = formatTip(tip);
+	    if(formatted != null && !formatted.isEmpty())
+		tipTex = Text.renderstroked(formatted, java.awt.Color.WHITE, java.awt.Color.BLACK).tex();
+	    lastRenderedTip = tip;
+	}
+	return tipTex;
+    }
+
+    public void draw(GOut g) {
+	try {
+	    Tex bg = this.bg.get().flayer(Resource.imgc).tex();
+	    double sx = sz.x / (double)fsz.x;
+	    double sy = sz.y / (double)fsz.y;
+	    Coord off = Coord.of((int)Math.round(IMeter.off.x * sx), (int)Math.round(IMeter.off.y * sy));
+	    Coord msz = Coord.of((int)Math.round(IMeter.msz.x * sx), (int)Math.round(IMeter.msz.y * sy));
+	    g.chcolor(0, 0, 0, 255);
+	    g.frect(off, msz);
+	    g.chcolor();
+	    for(Meter m : meters) {
+		int w = msz.x;
+		w = (int)Math.ceil(w * m.a);
+		g.chcolor(m.c);
+		g.frect(off, new Coord(w, msz.y));
+	    }
+	    g.chcolor();
+	    g.image(bg, Coord.z, sz);
+	    Tex tt = tipTex();
+	    if(tt != null) {
+		// centre on the bar, not the bg image (icon biases bg left).
+		Coord c = off.add(msz.div(2)).sub(tt.sz().div(2));
+		g.image(tt, c);
+	    }
+	} catch(Loading l) {
+	}
+    }
+
+    public double meter(int idx) {
+	return meters.size() > idx ? meters.get(idx).a : -1;
+    }
+}
