@@ -31,6 +31,7 @@ import haven.rx.Reactor;
 import haven.render.*;
 import me.ender.FakeDraggerWdg;
 
+import java.io.PrintWriter;
 import java.awt.*;
 import java.util.*;
 import java.awt.Color;
@@ -190,6 +191,15 @@ public class Fightsess extends Widget {
 		fx.used = false;
 		fx.spr.tick(dt);
 	    }
+	}
+    }
+
+    public void debugEffects(PrintWriter out) {
+	int i = 0;
+	out.printf("Fightsess target effects: %d active, current=%s%n", curfx.size(), curtgtfx);
+	for(Effect fx : curfx) {
+	    out.printf("  #%d %s used=%s slot=%s%n",
+		i++, fx.spr, fx.used, fx.slot == null ? "none" : "live");
 	}
     }
 

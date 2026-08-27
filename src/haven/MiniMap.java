@@ -1125,7 +1125,7 @@ public class MiniMap extends Widget {
 	if(dlvl <= 2 && CFG.MMAP_GRID.get()) {drawgrid(g);}
 	if(playerSegment && zoomlevel <= 1 && CFG.MMAP_VIEW.get()) {drawview(g);}
 	if(playerSegment && CFG.MMAP_SHOW_PATH.get()) {drawMovement(g);}
-	if(big && CFG.MMAP_POINTER.get()) {drawPointers(g);}
+	if(CFG.MMAP_POINTER.get()) {drawPointers(g);}
 	if(dlvl <= 1)
 	    drawicons(g);
 	if(playerSegment) drawparty(g);

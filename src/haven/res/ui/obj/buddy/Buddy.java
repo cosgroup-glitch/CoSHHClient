@@ -15,6 +15,7 @@ public class Buddy extends GAttrib implements InfoPart {
     private BuddyWnd.Buddy b = null;
     private int rgrp;
     private String rnm;
+    private boolean rhide;
 
     public Buddy(Gob gob, int id) {
 	super(gob);
@@ -53,7 +54,8 @@ public class Buddy extends GAttrib implements InfoPart {
 	}
 	if(bw != null)
 	    b = bw.find(id);
-	if(b != null) {
+	rhide = CFG.HIDE_PLAYER_NAMES.get();
+	if(b != null && !rhide) {
 	    Color col = BuddyWnd.gc[rgrp = b.group];
 	    cmp.add(InfoPart.rendertext(rnm = b.name, col), Coord.z);
 	}
@@ -67,6 +69,8 @@ public class Buddy extends GAttrib implements InfoPart {
 	    if((bw.find(id) != b) || b != null && ((!Objects.equals(rnm, b.name)) || (rgrp != b.group)))
 		info.dirty();
 	}
+	if(CFG.HIDE_PLAYER_NAMES.get() != rhide)
+	    info.dirty();
     }
 
     public boolean auto() {return(true);}

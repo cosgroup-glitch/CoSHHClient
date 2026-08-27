@@ -348,10 +348,11 @@ public class GeneralGobInfo extends GobInfo {
 	    int sdt = gob.sdt();
 	    boolean seed = (sdt & 1) != 1;
 	    boolean leaf = (sdt & 2) != 2;
+	    String bark = data.get(BARK);
 	    parts = new BufferedImage[]{
 		seed && GobInfoOpts.enabled(TreeSubPart.SEEDS) ? getIcon(data.get(SEED)) : null,
 		leaf && GobInfoOpts.enabled(TreeSubPart.LEAVES) ? getIcon(data.get(LEAF)) : null,
-		GobInfoOpts.enabled(TreeSubPart.BARK) ? getIcon(data.get(BARK)) : null,
+		GobInfoOpts.enabledTreeBark(bark) ? getIcon(bark) : null,
 		GobInfoOpts.enabled(TreeSubPart.BOUGH) ? getIcon(data.get(BOUGH)) : null,
 	    };
 	    

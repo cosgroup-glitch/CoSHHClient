@@ -70,7 +70,7 @@ Normal Ant builds may hit a JDK/Windows `AccessDeniedException` while javac clos
 
 1. Compile changed source files against a temporary jar made from `build/classes` and `build/classes-lib`.
 2. Rebuild `build/hafen.jar` from `build/classes` and `build/classes-lib`.
-3. Copy `build/hafen.jar` to `dist/Kami Client/app/hafen.jar`.
+3. Run the supported `bin` layout through `run-kami-bin.bat`; avoid maintaining a separate packaged `dist` copy for local testing.
 
 The `build.xml` change adds `build/classes` to the main javac classpath so incremental compiles can resolve already-built project classes when the environment allows javac to read them normally.
 

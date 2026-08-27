@@ -517,6 +517,11 @@ public class SkillWnd extends Widget {
 	pack();
     }
 
+    public void pursueCredo(Credo cr) {
+	if((cr != null) && (credo != null))
+	    credo.wdgmsg("crpursue", cr.nm);
+    }
+
     private List<Skill> decsklist(Object[] args, int a, boolean has) {
 	List<Skill> buf = new ArrayList<>();
 	while(a < args.length) {

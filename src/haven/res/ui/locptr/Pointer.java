@@ -376,17 +376,71 @@ public class Pointer extends Widget implements MiniMap.IPointer, DTarget {
     }
     
     public Coord sc(Coord c, Coord sz) {
-	Pair<Coord, Coord> p = screenp(c, sz);
-	return p.a.add(p.b);
+	return mmpos(c, sz).a;
     }
     
     public void drawmmarrow(GOut g, Coord tc, Coord sz) {
-	Coord tsz = this.sz;
-	Coord tlc = this.lc;
-	this.sz = sz;
-	drawarrow(g, tc);
-	this.sz = tsz;
-	this.lc = tlc;
+	Pair<Coord, Boolean> mp = mmpos(tc, sz);
+	Coord sc = mp.a;
+	boolean edge = mp.b;
+
+	QuestWnd questWnd;
+	if(tip != null && col == null && (questWnd = getQuestWnd()) != null) {
+	    int i = questWnd.getObjectiveIndex(tip);
+	    col = colors[i % colors.length];
+	}
+	g.usestate(col != null ? col : colors[0]);
+	if(edge) {
+	    Coord hsz = sz.div(2);
+	    Coord2d d = new Coord2d(sc.sub(hsz));
+	    double len = Math.max(1.0, Math.sqrt((d.x * d.x) + (d.y * d.y)));
+	    Coord2d dir = d.div(len);
+	    Coord2d perp = new Coord2d(-dir.y, dir.x);
+	    Coord2d tip = new Coord2d(sc);
+	    Coord2d base = tip.sub(dir.mul(UI.scale(18)));
+	    Coord2d p1 = base.add(perp.mul(UI.scale(6)));
+	    Coord2d p2 = base.sub(perp.mul(UI.scale(6)));
+	    Coord tx = g.tx;
+	    g.drawp(Model.Mode.TRIANGLES, new float[] {
+		(float)(tip.x + tx.x), (float)(tip.y + tx.y),
+		(float)(p1.x + tx.x), (float)(p1.y + tx.y),
+		(float)(p2.x + tx.x), (float)(p2.y + tx.y),
+	    });
+	    sc = base.round();
+	}
+	if(icon != null) {
+	    try {
+		if(licon == null)
+		    licon = icon.get().layer(Resource.imgc).tex();
+		g.aimage(licon, sc, 0.5, 0.5);
+	    } catch(Loading l) {
+	    }
+	}
+	g.chcolor();
+    }
+
+    private Pair<Coord, Boolean> mmpos(Coord tc, Coord sz) {
+	Coord hsz = sz.div(2);
+	Coord marg = UI.scale(18, 18);
+	Area box = Area.sized(marg, sz.sub(marg.mul(2)));
+	if(box.contains(tc))
+	    return(new Pair<>(tc, false));
+	Coord2d d = new Coord2d(tc.sub(hsz));
+	if((d.x == 0) && (d.y == 0))
+	    return(new Pair<>(hsz, false));
+	double t = Double.POSITIVE_INFINITY;
+	if(d.x > 0)
+	    t = Math.min(t, ((sz.x - marg.x) - hsz.x) / d.x);
+	else if(d.x < 0)
+	    t = Math.min(t, (marg.x - hsz.x) / d.x);
+	if(d.y > 0)
+	    t = Math.min(t, ((sz.y - marg.y) - hsz.y) / d.y);
+	else if(d.y < 0)
+	    t = Math.min(t, (marg.y - hsz.y) / d.y);
+	if(!Double.isFinite(t) || (t < 0))
+	    t = 0;
+	Coord sc = Coord.of((int)Math.round(hsz.x + (d.x * t)), (int)Math.round(hsz.y + (d.y * t)));
+	return(new Pair<>(sc, true));
     }
     
     @Override

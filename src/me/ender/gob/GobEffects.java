@@ -9,6 +9,7 @@ import haven.render.Transform;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.io.PrintWriter;
 
 public class GobEffects {
     private static final Resource tgtfx = Resource.local().loadwait("gfx/hud/combat/trgtarw");
@@ -64,6 +65,15 @@ public class GobEffects {
 		}
 		i.remove();
 	    }
+	}
+    }
+
+    public void debug(PrintWriter out) {
+	int i = 0;
+	out.printf("GobEffects: %d active%n", curfx.size());
+	for(Effect fx : curfx) {
+	    out.printf("  #%d %s duration=%.2f slot=%s place=%s%n",
+		i++, fx.spr, fx.duration, fx.slot == null ? "none" : "live", fx.place);
 	}
     }
     

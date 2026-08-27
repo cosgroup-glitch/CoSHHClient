@@ -46,10 +46,92 @@ public class MappingClient {
     public static void destroy() {
 	synchronized (MappingClient.class) {
 	    if(INSTANCE != null) {
+		/* KamiClient: mark it dead BEFORE shutting the pools down.
+		 * The marker and grid pipelines reschedule themselves, so a
+		 * task already in flight would otherwise keep going and call
+		 * execute() on a shut-down scheduler - which throws
+		 * RejectedExecutionException and silently drops the upload.
+		 * Tasks check dead() and bail out quietly instead. */
+		INSTANCE.dead = true;
 		INSTANCE.gridsUploader.shutdown();
 		INSTANCE.scheduler.shutdown();
 		INSTANCE = null;
 	    }
+	}
+    }
+
+    private volatile boolean dead = false;
+    public boolean dead() {return dead;}
+
+    /* KamiClient: every automap line goes through here so a player running the
+     * bat file can just copy the console back. Tagged and timestamped because
+     * these arrive interleaved from several pool threads. */
+    /* KamiClient: the server's response body, truncated - it usually carries
+     * the actual reason a request was rejected. */
+    static String readbody(HttpURLConnection conn, boolean error) {
+	try(InputStream in = error ? conn.getErrorStream() : conn.getInputStream()) {
+	    if(in == null)
+		return "<no body>";
+	    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+	    byte[] chunk = new byte[4096];
+	    int n;
+	    while((n = in.read(chunk)) > 0 && buf.size() < 2048)
+		buf.write(chunk, 0, n);
+	    String s = new String(buf.toByteArray(), StandardCharsets.UTF_8).trim();
+	    return s.isEmpty() ? "<empty body>" : (s.length() > 500 ? s.substring(0, 500) + "..." : s);
+	} catch(Exception ex) {
+	    return "<unreadable: " + ex + ">";
+	}
+    }
+
+    public static void log(String fmt, Object... args) {
+	System.out.printf("[automap %tT] %s%n", System.currentTimeMillis(),
+			  (args.length == 0) ? fmt : String.format(fmt, args));
+	System.out.flush();
+    }
+
+    /* automap failures used to go to stdout only, so an upload that never
+     * happened looked exactly like one that did. Put it in front of the user -
+     * they are the only one who can act on it. */
+    private void warn(String msg) {
+	log("ERROR: %s", msg);
+	try {
+	    GameUI gui = glob.sess.ui.gui;
+	    if(gui != null)
+		gui.error(msg);
+	} catch(Exception ignored) {}
+    }
+
+    /* KamiClient: every submission to the pools goes through these, so a
+     * shutdown race is a no-op rather than an exception. They report whether
+     * the task was actually accepted. */
+    private boolean submit(Runnable task) {
+	String what = task.getClass().getSimpleName();
+	if(dead) {
+	    log("submit(%s) refused: mapping client already destroyed", what);
+	    return false;
+	}
+	try {
+	    scheduler.execute(task);
+	    return true;
+	} catch(RejectedExecutionException ex) {
+	    log("submit(%s) REJECTED by scheduler: %s", what, ex);
+	    return false;
+	}
+    }
+
+    private boolean submit(Runnable task, long delay, TimeUnit unit) {
+	String what = task.getClass().getSimpleName();
+	if(dead) {
+	    log("submit(%s, +%d%s) refused: mapping client already destroyed", what, delay, unit);
+	    return false;
+	}
+	try {
+	    scheduler.schedule(task, delay, unit);
+	    return true;
+	} catch(RejectedExecutionException ex) {
+	    log("submit(%s, +%d%s) REJECTED by scheduler: %s", what, delay, unit, ex);
+	    return false;
 	}
     }
     
@@ -129,11 +211,18 @@ public class MappingClient {
 	try {
 	    if (INSTANCE == null)
 		return false;
+	    String url = endpoint + "/checkVersion?version=4&genus=" + genus;
 	    HttpURLConnection connection =
-		(HttpURLConnection) new URL(endpoint + "/checkVersion?version=4&genus=" + genus).openConnection();
+		(HttpURLConnection) new URL(url).openConnection();
 	    connection.setRequestMethod("GET");
-	    return connection.getResponseCode() == 200;
+	    connection.setConnectTimeout(15000);
+	    connection.setReadTimeout(15000);
+	    int code = connection.getResponseCode();
+	    if(code != 200)
+		log("checkVersion body: %s", readbody(connection, true));
+	    return code == 200;
 	} catch (Exception ex) {
+	    log("checkVersion FAILED for endpoint '%s': %s", endpoint, ex);
 	    return false;
 	}
     }
@@ -158,7 +247,7 @@ public class MappingClient {
     
     public void SetTimerToNearestRes(String inspectResult)
     {
-	scheduler.execute(new UploadInspectResult(playerGridId, playerCoord, inspectResult, genus));
+	submit(new UploadInspectResult(playerGridId, playerCoord, inspectResult, genus));
     }
     
     private Coord lastGC = null;
@@ -169,7 +258,7 @@ public class MappingClient {
      */
     public void EnterGrid(Coord gc) {
 	lastGC = gc;
-	scheduler.execute(new GenerateGridUpdateTask(gc, genus));
+	submit(new GenerateGridUpdateTask(gc, genus));
     }
     
     /***
@@ -197,7 +286,7 @@ public class MappingClient {
 		long id = glob.map.getgrid(gc).id;
 		MapRef mapRef = cache.get(id);
 		if(mapRef == null) {
-		    scheduler.execute(new Locate(id));
+		    submit(new Locate(id));
 		}
 		return mapRef;
 	    }
@@ -243,7 +332,9 @@ public class MappingClient {
 		    connection.disconnect();
 		}
 		
-	    } catch (final Exception ex) { }
+	    } catch (final Exception ex) {
+		log("locate(gridID=%d) FAILED: %s", gridID, ex);
+	    }
 	}
     }
     
@@ -253,8 +344,14 @@ public class MappingClient {
      * @param uploadCheck
      */
     public void ProcessMap(MapFile mapfile, Predicate<Marker> uploadCheck) {
-	scheduler.schedule(new ExtractMapper(mapfile, uploadCheck, genus), 1, TimeUnit.SECONDS);
-	
+	log("ProcessMap called: endpoint=%s genus=%s player=%s gridUploads=%s tracking=%s",
+	    endpoint, genus, playerName, gridEnabled, trackingEnabled);
+	if(endpoint == null || endpoint.isEmpty()) {
+	    warn("Automap: no endpoint configured, nothing will be uploaded.");
+	    return;
+	}
+	if(!submit(new ExtractMapper(mapfile, uploadCheck, genus), 1, TimeUnit.SECONDS))
+	    warn("Automap: could not start marker extraction.");
     }
     
     private class ExtractMapper implements Runnable {
@@ -273,26 +370,42 @@ public class MappingClient {
 	public void run() {
 	    if(mapfile.lock.readLock().tryLock()) {
 		try {
-		    List<MarkerData> markers = mapfile.markers.stream().map(m -> {
+		    List<MarkerData> markers = mapfile.markers.stream().filter(m -> uploadableMarker(m, uploadCheck)).map(m -> {
 			Coord mgc = new Coord(Math.floorDiv(m.tc.x, 100), Math.floorDiv(m.tc.y, 100));
 			Indir<MapFile.Grid> indirGrid = mapfile.segments.get(m.seg).grid(mgc);
 			return new MarkerData(m, indirGrid);
 		    }).collect(Collectors.toList());
-		    System.out.println("collected " + markers.size() + " markers");
-		    
-		    scheduler.schedule(new ProcessMapper(mapfile, markers, genus), 15, TimeUnit.SECONDS);
+
+		    if(!submit(new ProcessMapper(mapfile, markers, genus), 15, TimeUnit.SECONDS))
+			warn("Automap: could not queue marker processing.");
 		} catch (Exception ex)
 		{
-		    System.out.println("Error while collection markers: " +ex);
+		    warn("Automap: error while collecting markers: " + ex);
+		    ex.printStackTrace(System.out);
 		}
 		mapfile.lock.readLock().unlock();
 	    } else {
 		if(retries-- > 0) {
-		    System.out.println("rescheduling upload");
-		    scheduler.schedule(this, 5, TimeUnit.SECONDS);
+		    log("map file is busy, retrying extraction in 5s (%d retries left)", retries);
+		    submit(this, 5, TimeUnit.SECONDS);
+		} else {
+		    /* KamiClient: this used to just stop. */
+		    warn("Automap: gave up waiting for the map file - no markers uploaded.");
 		}
 	    }
 	}
+    }
+
+    private boolean uploadableMarker(Marker marker, Predicate<Marker> uploadCheck) {
+	if(!((marker instanceof PMarker) || (marker instanceof SMarker)))
+	    return false;
+	if(marker instanceof SMarker) {
+	    String res = ((SMarker)marker).res.name;
+	    if(res.startsWith("gfx/hud/mmap/claim/") || res.startsWith("gfx/hud/mmap/vil/") ||
+	       res.equals("mm/claim") || res.equals("radar/claim"))
+		return false;
+	}
+	return (uploadCheck == null) || uploadCheck.test(marker);
     }
     
     private class MarkerData {
@@ -321,25 +434,37 @@ public class MappingClient {
 	    try
 	    {
 		ArrayList<JSONObject> loadedMarkers = new ArrayList<>();
-		if (markers.isEmpty())
+		if (markers.isEmpty()) {
 		    return;
-		
+		}
+
 		List<Color> uploadColors = new LinkedList<>();
 		CFG.AUTOMAP_MARKERS.get().forEach(g -> {
 		    uploadColors.add(g.col);
 		});
-		
-		System.out.println("processing " + markers.size() + " markers");
+
+		/* KamiClient: account for every marker that does NOT make it
+		 * into the upload. "collected 148 / scheduling 125" gave no clue
+		 * where the other 23 went. */
+		int skipNoGrid = 0, skipColor = 0, skipOther = 0;
 		for (int i = 0; i < markers.size(); i++) {
 		    try {
 			MarkerData md = markers.get(i);
-			if (md.indirGrid.get() == null)
+			if(!((md.m instanceof PMarker) || (md.m instanceof SMarker))) {
+			    skipOther++;
 			    continue;
-			
+			}
+			if (md.indirGrid.get() == null) {
+			    skipNoGrid++;
+			    continue;
+			}
+
 			if (md.m instanceof PMarker)
-			    if (!uploadColors.contains(((PMarker) md.m).color))
+			    if (!uploadColors.contains(((PMarker) md.m).color)) {
+				skipColor++;
 				continue;
-			
+			    }
+
 			Coord mgc = new Coord(Math.floorDiv(md.m.tc.x, 100), Math.floorDiv(md.m.tc.y, 100));
 			long gridId = md.indirGrid.get().id;
 			JSONObject o = new JSONObject();
@@ -352,7 +477,17 @@ public class MappingClient {
 			if(md.m instanceof SMarker) {
 			    o.put("type", "shared");
 			    try {
-				o.put("id", ((SMarker) md.m).oid);
+				/* KamiClient: .longValue(), NOT the UID itself.
+				 *
+				 * oid became a UID when ender markers were made to
+				 * extend the vanilla ones. UID extends Number, so
+				 * org.json writes it unquoted via toString() - and
+				 * UID.toString() is HEX. That put a bare
+				 * `id: 3f2a9c4b1d8e` in the body, which is not valid
+				 * JSON, so the server rejected the whole request with
+				 * a 400 during model binding - before any of its own
+				 * code ran, which is why nothing was logged. */
+				o.put("id", ((SMarker) md.m).oid.longValue());
 			    } catch (Exception ex)
 			    {
 				o.put("id", 0);
@@ -364,24 +499,40 @@ public class MappingClient {
 			}
 			loadedMarkers.add(o);
 		    } catch (Loading ex) {
-			System.out.println(ex);
-			System.out.println("Rescheduling marker upload processing...");
-			scheduler.schedule(this, 5, TimeUnit.SECONDS);
+			log("marker %d/%d still loading (%s), retrying the whole batch in 5s",
+			    i + 1, markers.size(), ex.getMessage());
+			submit(this, 5, TimeUnit.SECONDS);
 			return;
+		    } catch (Exception ex) {
+			/* Don't let one bad marker kill the whole batch. */
+			skipOther++;
+			log("marker %d/%d skipped: %s", i + 1, markers.size(), ex);
 		    }
 		}
-		
-		System.out.println("scheduling upload for " + loadedMarkers.size() + " markers");
-		try {
-		    scheduler.execute(new MarkerUpdate(new JSONArray(loadedMarkers.toArray())));
-		} catch (Exception ex) {
-		    System.out.println(ex);
+
+		log("prepared %d of %d markers (skipped: %d no grid, %d filtered by colour, %d errors)",
+		    loadedMarkers.size(), markers.size(), skipNoGrid, skipColor, skipOther);
+
+		if(loadedMarkers.isEmpty()) {
+		    warn("Automap: no markers qualified for upload.");
+		    return;
+		}
+		if(dead()) {
+		    warn("Automap: client was destroyed before the upload could be queued.");
+		    return;
+		}
+		log("scheduling upload for %d markers to %s/markerUpdate", loadedMarkers.size(), endpoint);
+		if(!submit(new MarkerUpdate(new JSONArray(loadedMarkers.toArray())))) {
+		    /* KamiClient: this used to be a println of the rejection and
+		     * nothing else, so a dropped marker upload looked identical
+		     * to a successful one. */
+		    warn(String.format("Marker upload failed: could not queue %d markers.", loadedMarkers.size()));
 		}
 	    }
 	    catch (Exception ex)
 	    {
-		System.out.println("Error while processing markers");
-		System.out.println(ex);
+		warn("Automap: error while processing markers: " + ex);
+		ex.printStackTrace(System.out);
 	    }
 	}
     }
@@ -395,25 +546,43 @@ public class MappingClient {
 	
 	@Override
 	public void run() {
+	    String url = endpoint + "/markerUpdate";
+	    long t0 = System.currentTimeMillis();
 	    try {
+		final String json = data.toString();
+		log("POST %s (%d markers, %d bytes)", url, data.length(), json.length());
 		HttpURLConnection connection =
-		    (HttpURLConnection) new URL(endpoint + "/markerUpdate").openConnection();
+		    (HttpURLConnection) new URL(url).openConnection();
 		connection.setRequestMethod("POST");
 		connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+		connection.setConnectTimeout(15000);
+		connection.setReadTimeout(30000);
 		connection.setDoOutput(true);
 		try (DataOutputStream out = new DataOutputStream(connection.getOutputStream())) {
-		    final String json = data.toString();
-		    //System.out.println(json);
 		    out.write(json.getBytes(StandardCharsets.UTF_8));
 		}
 		int code = connection.getResponseCode();
+		long ms = System.currentTimeMillis() - t0;
+		/* KamiClient: the response code was read and thrown away, so a
+		 * server-side rejection was indistinguishable from a successful
+		 * upload. Read the body too - that is where the server explains
+		 * itself. */
+		if(code < 200 || code >= 300) {
+		    warn(String.format("Marker upload rejected: HTTP %d %s after %dms",
+				       code, connection.getResponseMessage(), ms));
+		    log("server said: %s", readbody(connection, true));
+		} else {
+		    log("marker upload OK: HTTP %d in %dms, %d markers accepted", code, ms, data.length());
+		}
 		connection.disconnect();
 	    } catch (Exception ex) {
-		System.out.println(ex);
+		warn(String.format("Marker upload failed after %dms: %s",
+				   System.currentTimeMillis() - t0, ex));
+		ex.printStackTrace(System.out);
 	    }
 	}
     }
-    
+
     private class PositionUpdates implements Runnable {
 	private class Tracking {
 	    public String name;
@@ -466,6 +635,15 @@ public class MappingClient {
 	public void run() {
 	    if(trackingEnabled) {
 		Glob g = glob;
+		try {
+		    GameUI gui = g.sess.ui.gui;
+		    Gob player = (gui == null || gui.map == null) ? null : gui.map.player();
+		    if(player != null) {
+			MCache.Grid grid = glob.map.getgrid(toGC(player.rc));
+			Track(player.id, player.rc, grid.id, genus);
+		    }
+		} catch(Exception ignored) {
+		}
 		Iterator<Map.Entry<Long, Tracking>> i = tracking.entrySet().iterator();
 		JSONObject upload = new JSONObject();
 		while (i.hasNext()) {
@@ -476,21 +654,31 @@ public class MappingClient {
 			upload.put(String.valueOf(e.getKey()), e.getValue().getJSON());
 		    }
 		}
+		if(upload.length() == 0)
+		    return;
 		
 		try {
 		    final HttpURLConnection connection =
 			(HttpURLConnection) new URL(endpoint + "/positionUpdate").openConnection();
 		    connection.setRequestMethod("POST");
 		    connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+		    connection.setConnectTimeout(15000);
+		    connection.setReadTimeout(15000);
 		    connection.setDoOutput(true);
 		    try (DataOutputStream out = new DataOutputStream(connection.getOutputStream())) {
 			final String json = upload.toString();
-			//System.out.println(json);
 			out.write(json.getBytes(StandardCharsets.UTF_8));
 		    } catch (Exception e) {
+			log("positionUpdate: failed writing body: %s", e);
 		    }
-		    connection.getResponseCode();
+		    int code = connection.getResponseCode();
+		    /* Position updates run every 5s, so only complain when they
+		     * actually fail - otherwise this would flood the console. */
+		    if(code < 200 || code >= 300)
+			log("positionUpdate -> HTTP %d: %s", code, readbody(connection, true));
+		    connection.disconnect();
 		} catch (final Exception ex) {
+		    log("positionUpdate FAILED: %s", ex);
 		}
 	    }
 	}
@@ -534,11 +722,11 @@ public class MappingClient {
 			    gridRefs.put(String.valueOf(subg.id), new WeakReference<MCache.Grid>(subg));
 			}
 		    }
-		    scheduler.execute(new UploadGridUpdateTask(new GridUpdate(gridMap, gridRefs), genus));
+		    submit(new UploadGridUpdateTask(new GridUpdate(gridMap, gridRefs), genus));
 		} catch (LoadingMap lm) {
 		    retries--;
 		    if(retries >= 0) {
-			scheduler.schedule(this, 1L, TimeUnit.SECONDS);
+			submit(this, 1L, TimeUnit.SECONDS);
 		    }
 		} catch (Exception e) {
 		    System.out.println(e);
@@ -573,7 +761,10 @@ public class MappingClient {
 			String json = new JSONObject(dataToSend).toString();
 			out.write(json.getBytes(StandardCharsets.UTF_8));
 		    }
-		    if(connection.getResponseCode() == 200) {
+		    int gcode = connection.getResponseCode();
+		    if(gcode != 200)
+			log("gridUpdate -> HTTP %d: %s", gcode, readbody(connection, true));
+		    if(gcode == 200) {
 			DataInputStream dio = new DataInputStream(connection.getInputStream());
 			int nRead;
 			byte[] data = new byte[1024];
@@ -597,11 +788,14 @@ public class MappingClient {
 				gridsUploader.execute(new GridOverlayUploadTask(reqs2.getString(i), gridUpdate.gridRefs.get(reqs2.getString(i)), genus));
 			    }
 			}
-			catch (Exception ex) {}
+			catch (Exception ex) {
+			    log("gridUpdate: overlay request handling failed: %s", ex);
+			}
 		    }
-		    
+
 		} catch (Exception ex) {
-		    System.out.println(ex);
+		    log("gridUpdate FAILED: %s", ex);
+		    ex.printStackTrace(System.out);
 		}
 	    }
 	}
@@ -767,12 +961,15 @@ public class MappingClient {
 			String json = getJSON().toString();
 			out.write(json.getBytes(StandardCharsets.UTF_8));
 		    } catch (IOException e) {
-		    
+			log("inspectUpdate: failed writing body: %s", e);
 		    }
-		    connection.getResponseCode();
+		    int code = connection.getResponseCode();
+		    if(code < 200 || code >= 300)
+			log("inspectUpdate -> HTTP %d: %s", code, readbody(connection, true));
+		    connection.disconnect();
 		} catch (Exception ex)
 		{
-		    System.out.println("Cannot upload inspect result: " + ex.getMessage());
+		    log("Cannot upload inspect result: %s", ex);
 		}
 		
 	    }
@@ -795,12 +992,15 @@ public class MappingClient {
 		out.write(o.toString().getBytes(StandardCharsets.UTF_8));
 	    }
 	    int code = connection.getResponseCode();
-	    if (code != 200)
+	    if (code != 200) {
+		log("gridCacheUpdate -> HTTP %d: %s", code, readbody(connection, true));
 		throw new Exception("Couldn't upload Cache. Errorcode: " + code);
+	    }
+	    connection.disconnect();
 	}
 	catch (Exception ex)
 	{
-		System.out.println(ex.getMessage());
+	    log("gridCacheUpdate FAILED: %s", ex.getMessage());
 	}
     }
     

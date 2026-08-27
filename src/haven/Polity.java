@@ -40,6 +40,7 @@ public abstract class Polity extends Widget {
     public int mseq;
     protected Widget mw;
     private int nextmemb = 0;
+    private int vactiony = -1;
 
     public abstract String type();
 
@@ -141,6 +142,72 @@ public abstract class Polity extends Widget {
 	super(new Coord(width, UI.scale(200)));
 	this.cap = cap;
 	this.name = name;
+    }
+
+    private boolean reflowVillageDetails() {
+	if(!"Village".equals(cap))
+	    return(false);
+	Widget acts = null;
+	for(Widget ch = child; ch != null; ch = ch.next) {
+	    if(isVillageActionBlock(ch)) {
+		acts = ch;
+		break;
+	    }
+	}
+	if((acts == null) || (mw == null) || !mw.visible)
+	    return(false);
+	boolean changed = false;
+	if(vactiony < 0)
+	    vactiony = acts.c.y;
+	if(!acts.visible) {
+	    acts.show();
+	    changed = true;
+	}
+	if(acts.c.y != vactiony) {
+	    acts.move(new Coord(acts.c.x, vactiony));
+	    changed = true;
+	}
+	int my = vactiony + acts.sz.y + UI.scale(5);
+	if(mw.c.y != my) {
+	    mw.move(new Coord(mw.c.x, my));
+	    changed = true;
+	}
+	return(changed);
+    }
+
+    private boolean isVillageActionBlock(Widget w) {
+	if(w.getClass() != Widget.class)
+	    return(false);
+	if(w.sz.x < width)
+	    return(false);
+	boolean hasButton = false;
+	boolean hasLabel = false;
+	for(Widget ch = w.child; ch != null; ch = ch.next) {
+	    if(ch instanceof Button)
+		hasButton = true;
+	    else if(ch instanceof Label)
+		hasLabel = true;
+	}
+	return(hasButton && hasLabel);
+    }
+
+    @Override
+    public void pack() {
+	reflowVillageDetails();
+	super.pack();
+    }
+
+    @Override
+    public void cresize(Widget ch) {
+	reflowVillageDetails();
+	super.cresize(ch);
+    }
+
+    @Override
+    public void tick(double dt) {
+	super.tick(dt);
+	if(reflowVillageDetails())
+	    super.pack();
     }
 
     public class AuthMeter extends Widget {

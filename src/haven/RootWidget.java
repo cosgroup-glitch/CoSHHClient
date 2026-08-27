@@ -212,6 +212,44 @@ public class RootWidget extends ConsoleHost implements UI.Notice.Handler, Widget
 		}
 	    }
 	});
+	cmdmap.put("whatat", new Console.Command() {
+	    public void run(Console cons, String[] args) throws Exception {
+		Coord c = ui.mc;
+		if(args.length >= 3)
+		    c = Coord.of(Integer.parseInt(args[1]), Integer.parseInt(args[2]));
+		cons.out.printf("Widgets at %s:%n", c);
+		int n = 0;
+		for(Widget w = RootWidget.this; w != null; w = w.rnext()) {
+		    Coord wc = w.rootpos();
+		    if(w.visible() && c.isect(wc, w.sz)) {
+			Coord lc = c.sub(wc);
+			boolean hit = false;
+			try {
+			    hit = w.checkhit(lc);
+			} catch(Exception e) {
+			    cons.out.printf("  hit-test failed for %s: %s%n", w, e);
+			}
+			cons.out.printf("  %s %s root=%s local=%s size=%s z=%d hit=%s%n",
+			    hit ? "*" : " ", w.getClass().getName(), wc, lc, w.sz, w.z, hit);
+			n++;
+		    }
+		}
+		cons.out.printf("%d visible widgets cover %s%n", n, c);
+	    }
+	});
+	cmdmap.put("fxdebug", new Console.Command() {
+	    public void run(Console cons, String[] args) throws Exception {
+		effects.debug(cons.out);
+		GameUI gui = findchild(GameUI.class);
+		if(gui == null) {
+		    cons.out.println("No GameUI found");
+		} else if(gui.fsess == null) {
+		    cons.out.println("No active Fightsess");
+		} else {
+		    gui.fsess.debugEffects(cons.out);
+		}
+	    }
+	});
     }
     public Map<String, Console.Command> findcmds() {
 	return(cmdmap);

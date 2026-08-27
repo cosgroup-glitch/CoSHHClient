@@ -34,12 +34,29 @@ public class GobInfoOpts extends WindowX {
 	SEEDS("Seeds"),
 	LEAVES("Leaves"),
 	BARK("Bark"),
+	TREE_BARK("Tree bark"),
+	TOUGH_BARK("Tough bark"),
+	WILLOW_BARK("Willow bark"),
+	BIRCH_BARK("Birch Bark"),
 	BOUGH("Bough");
 	
 	public final String text;
 	
 	TreeSubPart(String text) {this.text = text;}
     }
+
+    private static final TreeSubPart[] TREE_PARTS = {
+	TreeSubPart.SEEDS,
+	TreeSubPart.LEAVES,
+	TreeSubPart.BOUGH,
+    };
+
+    private static final TreeSubPart[] BARK_PARTS = {
+	TreeSubPart.TREE_BARK,
+	TreeSubPart.TOUGH_BARK,
+	TreeSubPart.WILLOW_BARK,
+	TreeSubPart.BIRCH_BARK,
+    };
     
     public GobInfoOpts() {
 	super(Coord.z, "Gob info settings");
@@ -77,7 +94,7 @@ public class GobInfoOpts extends WindowX {
 	composer.add(new Label("Tree parts:"));
 	composer.hpad(composer.hpad() + 2 * PAD);
 	Set<TreeSubPart> selectedTreeParts = CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.get();
-	for (TreeSubPart cat : TreeSubPart.values()) {
+	for (TreeSubPart cat : TREE_PARTS) {
 	    CheckBox box = composer.add(new CheckBox(cat.text, false));
 	    box.a = selectedTreeParts.contains(cat);
 	    box.changed(val -> {
@@ -87,6 +104,24 @@ public class GobInfoOpts extends WindowX {
 		    changed = categories.add(cat);
 		} else {
 		    changed = categories.remove(cat);
+		}
+		if(changed) {
+		    CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.set(categories);
+		}
+	    });
+	}
+	composer.add(new Label("Bark:"));
+	composer.hpad(composer.hpad() + 2 * PAD);
+	for (TreeSubPart cat : BARK_PARTS) {
+	    CheckBox box = composer.add(new CheckBox(cat.text, false));
+	    box.a = selectedTreeParts.contains(cat) || selectedTreeParts.contains(TreeSubPart.BARK);
+	    box.changed(val -> {
+		Set<TreeSubPart> categories = CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.get();
+		boolean changed = categories.remove(TreeSubPart.BARK);
+		if(val) {
+		    changed |= categories.add(cat);
+		} else {
+		    changed |= categories.remove(cat);
 		}
 		if(changed) {
 		    CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.set(categories);
@@ -119,6 +154,21 @@ public class GobInfoOpts extends WindowX {
     public static boolean disabled(InfoPart part) {return CFG.DISPLAY_GOB_INFO_DISABLED_PARTS.get().contains(part);}
     
     public static boolean enabled(TreeSubPart part) {return CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.get().contains(part);}
+
+    public static boolean enabledTreeBark(String res) {
+	Set<TreeSubPart> parts = CFG.DISPLAY_GOB_INFO_TREE_ENABLED_PARTS.get();
+	if(parts.contains(TreeSubPart.BARK))
+	    return(true);
+	if(res == null)
+	    return(false);
+	if(res.equals("gfx/invobjs/bark-willow"))
+	    return(parts.contains(TreeSubPart.WILLOW_BARK));
+	if(res.equals("gfx/invobjs/bark-birch"))
+	    return(parts.contains(TreeSubPart.BIRCH_BARK));
+	if(res.equals("gfx/invobjs/toughbark"))
+	    return(parts.contains(TreeSubPart.TOUGH_BARK));
+	return(parts.contains(TreeSubPart.TREE_BARK));
+    }
     
     public static void toggle(InfoPart part) {
 	Set<InfoPart> parts = CFG.DISPLAY_GOB_INFO_DISABLED_PARTS.get();

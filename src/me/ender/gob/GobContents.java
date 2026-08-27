@@ -7,6 +7,7 @@ import haven.Gob;
 import haven.GobTag;
 
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 
 public class GobContents {
@@ -47,5 +48,10 @@ public class GobContents {
 	String resid = gob.resid();
 	if(resid == null) {return null;}
 	return DATA.get(resid);
+    }
+
+    public static Map<String, String> getData(String resid) {
+	Map<String, String> ret = DATA.get(resid);
+	return(ret == null ? Collections.emptyMap() : ret);
     }
 }

@@ -14,6 +14,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
     private static final Color STAM_HI = new Color(16, 16, 255, 190);
     private static final Color ENERGY = new Color(128, 128, 255, 205);
     private static final Color ENERGY_LOW = new Color(220, 80, 80, 220);
+    private static final Color ENERGY_HIGH = new Color(72, 190, 92, 220);
     private static final int ENERGY_MAX = 10000;
     private static final Pattern HP_TIP = Pattern.compile(".*?(\\d+)/(\\d+)/(\\d+).*");
     private static final Pattern NUMBERS = Pattern.compile("(\\d+)");
@@ -131,7 +132,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
     
     private void drawenergy(GOut g) {
 	double value = Math.max(0, meter.meter(0));
-	g.chcolor(value < 0.30 ? ENERGY_LOW : ENERGY);
+	g.chcolor(value >= 0.80 ? ENERGY_HIGH : value < 0.20 ? ENERGY_LOW : ENERGY);
 	g.frect(Coord.z, sz.mul(fill(value), 1));
 	frame(g);
 	label(g, energytext(value));
@@ -154,5 +155,12 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
     
     private double fill(double value) {
 	return Math.max(0, Math.min(1, value));
+    }
+
+    @Override
+    public Object tooltip(Coord c, Widget prev) {
+	if(metername.equals("nrj"))
+	    return RichText.render("$b{Fullness meter}\nAbove 8000% for healing, below 2000% starving.", UI.scale(240));
+	return super.tooltip(c, prev);
     }
 }

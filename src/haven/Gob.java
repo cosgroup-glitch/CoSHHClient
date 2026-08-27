@@ -77,12 +77,14 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     private final Set<GobTag> tags = new HashSet<>();
     public boolean drivenByPlayer = false;
     public boolean mapProcessed = false;
+    public double gobSpeed = 0;
     private long vehicleId = 0;
     public final Set<Gob> occupants = new HashSet<>();
     private GobRadius radius = null;
     private long eseq = 0;
     private Overlay marker;
     private MarkerSprite.Id markerId;
+    private GobSpeedInfo gobSpeedInfo;
     public static final ChangeCallback CHANGED = new ChangeCallback() {
 	@Override
 	public void added(Gob ob) {
@@ -164,7 +166,9 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 		return;
 	    }
 	    remove0();
-	    gob.ols.remove(this);
+	    synchronized(gob.ols) {
+		gob.ols.remove(this);
+	    }
 	    removed();
 	    gob.overlaysUpdated();
 	}
@@ -558,18 +562,20 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     public void ctick(double dt) {
 	for(GAttrib a : getAttrSnapshot())
 	    a.ctick(dt);
-	for(Iterator<Overlay> i = ols.iterator(); i.hasNext();) {
-	    Overlay ol = i.next();
-	    if(ol.slots == null) {
-		try {
-		    ol.init();
-		} catch(Loading e) {}
-	    } else {
-		boolean done = ol.tick(dt);
-		if((!ol.delign || (ol.spr instanceof Sprite.CDel)) && done) {
-		    ol.remove0();
-		    i.remove();
-		    overlaysUpdated();
+	synchronized(ols) {
+	    for(Iterator<Overlay> i = ols.iterator(); i.hasNext();) {
+		Overlay ol = i.next();
+		if(ol.slots == null) {
+		    try {
+			ol.init();
+		    } catch(Loading e) {}
+		} else {
+		    boolean done = ol.tick(dt);
+		    if((!ol.delign || (ol.spr instanceof Sprite.CDel)) && done) {
+			ol.remove0();
+			i.remove();
+			overlaysUpdated();
+		    }
 		}
 	    }
 	}
@@ -601,7 +607,7 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	Drawable d = getattr(Drawable.class);
 	if(d != null)
 	    d.gtick(g);
-	for(Overlay ol : ols) {
+	for(Overlay ol : overlaySnapshot()) {
 	    if(ol.spr != null)
 		ol.spr.gtick(g);
 	}
@@ -662,7 +668,9 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	}
 	ol.init();
 	ol.add0();
-	ols.add(ol);
+	synchronized(ols) {
+	    ols.add(ol);
+	}
 	overlayAdded(ol);
 	overlaysUpdated();
     }
@@ -686,16 +694,20 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     }
     
     public Overlay findol(int id) {
-	for(Overlay ol : ols) {
-	    if(ol.id == id)
-		return(ol);
+	synchronized(ols) {
+	    for(Overlay ol : ols) {
+		if(ol.id == id)
+		    return(ol);
+	    }
 	}
 	return(null);
     }
     
     public <T extends Sprite> T findsprol(Class<T> cl) {
-	for(Overlay ol : ols) {
-	    if(cl.isInstance(ol.spr)) {return cl.cast(ol.spr);}
+	synchronized(ols) {
+	    for(Overlay ol : ols) {
+		if(cl.isInstance(ol.spr)) {return cl.cast(ol.spr);}
+	    }
 	}
 	return(null);
     }
@@ -812,6 +824,7 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	Moving m = getattr(Moving.class);
 	if(m != null)
 	    m.move(c);
+	gobSpeed = (m != null) ? m.getv() : 0;
 	if(Boolean.TRUE.equals(isMe()) && (CFG.AUTOMAP_UPLOAD.get() || CFG.AUTOMAP_TRACK.get())) {
 	    MappingClient.getInstance().CheckGridCoord(c);
 	    if(CFG.AUTOMAP_TRACK.get()) {
@@ -1092,12 +1105,9 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     
     public void added(RenderTree.Slot slot) {
 	slot.ostate(curstate());
-	synchronized (ols)
-	{
-	    for(Overlay ol : ols) {
-		if(ol.slots != null)
-		    slot.add(ol);
-	    }
+	for(Overlay ol : overlaySnapshot()) {
+	    if(ol.slots != null)
+		slot.add(ol);
 	}
 	Map<Class<? extends GAttrib>, GAttrib> attr = cloneattrs();
 	for(GAttrib a : attr.values()) {
@@ -1105,6 +1115,12 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 		slot.add((RenderTree.Node) a);
 	}
 	slots.add(slot);
+    }
+
+    private Collection<Overlay> overlaySnapshot() {
+	synchronized(ols) {
+	    return(new ArrayList<>(ols));
+	}
     }
     
     public void removed(RenderTree.Slot slot) {
@@ -1833,8 +1849,15 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	if(prev instanceof Moving) {
 	    glob.oc.paths.removePath((Moving) prev);
 	}
+	if(prev instanceof Moving && !(a instanceof Moving)) {
+	    gobSpeed = 0;
+	}
 	if(a instanceof LinMove || a instanceof Homing) {
 	    glob.oc.paths.addPath((Moving) a);
+	}
+	if(a instanceof Moving && gobSpeedInfo == null) {
+	    gobSpeedInfo = new GobSpeedInfo(this);
+	    setattr(GobSpeedInfo.class, gobSpeedInfo);
 	}
 	long drives = 0;
 	if(prev instanceof Following) {

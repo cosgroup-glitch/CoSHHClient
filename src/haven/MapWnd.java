@@ -79,10 +79,26 @@ public class MapWnd extends WindowX implements Console.Directory {
     private final static Comparator<ListMarker> namecmp = ((a, b) -> a.mark.nm.compareTo(b.mark.nm));
     private final static Comparator<ListMarker> typecmp = Comparator.comparing((ListMarker lm) -> lm.type).thenComparing(namecmp);
 
+    private static class ToolbarCheckBox extends ICheckBox {
+	private static final Coord btnsz = UI.scale(20, 20);
+
+	ToolbarCheckBox(String base) {
+	    super("gfx/hud/mmap/" + base + "/", "u", "d", "h", "dh");
+	    resize(btnsz);
+	}
+
+	public void draw(GOut g) {
+	    Tex tex = !state() ? (h ? hoverup : up) : (h ? hoverdown : down);
+	    g.image(tex, Coord.z, sz);
+	}
+    }
+
     public static final KeyBinding kb_home = KeyBinding.get("mapwnd/home", KeyMatch.forcode(KeyEvent.VK_HOME, 0));
     public static final KeyBinding kb_mark = KeyBinding.get("mapwnd/mark", KeyMatch.nil);
     public static final KeyBinding kb_hmark = KeyBinding.get("mapwnd/hmark", KeyMatch.forcode(KeyEvent.VK_M, KeyMatch.C));
     public static final KeyBinding kb_compact = KeyBinding.get("mapwnd/compact", KeyMatch.forchar('A', KeyMatch.M));
+    public static final KeyBinding kb_claim = KeyBinding.get("mapwnd/claim", KeyMatch.nil);
+    public static final KeyBinding kb_vil = KeyBinding.get("mapwnd/vil", KeyMatch.nil);
     public static final KeyBinding kb_prov = KeyBinding.get("mapwnd/prov", KeyMatch.nil);
     public MapWnd(MapFile file, MapView mv, Coord sz, String title) {
 	super(sz, title, true);
@@ -136,6 +152,7 @@ public class MapWnd extends WindowX implements Console.Directory {
 	    .changed(a -> toggleol("realm", a))
 	    .settip("Display provinces").setgkey(kb_prov);
 	toolbar.pack();
+	syncClaimOverlays();
 	topbar = add(new Widget(Coord.z), Coord.z);
  
 	Widget btn;
@@ -156,6 +173,18 @@ public class MapWnd extends WindowX implements Console.Directory {
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/lock", "", "-d", "-h"), btn.pos("ur"))
 	    .state(CFG.MAP_COMPACT_LOCKED::get).set(a -> toggleCompactLock())
 	    .settip("Lock compact window position & size.", true);
+
+	btn = topbar.add(new ToolbarCheckBox("claim"), btn.pos("ur"))
+	    .state(CFG.MMAP_CLAIM::get)
+	    .set(a -> setClaimOverlay("cplot", CFG.MMAP_CLAIM, a))
+	    .settip("Display personal claims")
+	    .setgkey(kb_claim);
+
+	btn = topbar.add(new ToolbarCheckBox("vil"), btn.pos("ur"))
+	    .state(CFG.MMAP_VILLAGE::get)
+	    .set(a -> setClaimOverlay("vlg", CFG.MMAP_VILLAGE, a))
+	    .settip("Display village claims")
+	    .setgkey(kb_vil);
     
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/marknames", "", "-d", "-h"), UI.scale(new Coord(4,24)))
 	    .state(CFG.MMAP_SHOW_MARKER_NAMES::get)
@@ -206,6 +235,22 @@ public class MapWnd extends WindowX implements Console.Directory {
 	    overlays.add(tag);
 	else
 	    overlays.remove(tag);
+    }
+
+    private void setClaimOverlay(String tag, CFG<Boolean> cfg, boolean a) {
+	cfg.set(a);
+	toggleol(tag, a);
+	if(mv != null) {
+	    if(a && !mv.visol(tag))
+		mv.enol(tag);
+	    else if(!a && mv.visol(tag))
+		mv.disol(tag);
+	}
+    }
+
+    private void syncClaimOverlays() {
+	setClaimOverlay("cplot", CFG.MMAP_CLAIM, CFG.MMAP_CLAIM.get());
+	setClaimOverlay("vlg", CFG.MMAP_VILLAGE, CFG.MMAP_VILLAGE.get());
     }
 
     private class ViewFrame extends Frame {
