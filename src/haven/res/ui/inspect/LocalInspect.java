@@ -3,6 +3,7 @@ package haven.res.ui.inspect;
 
 import haven.*;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -110,7 +111,18 @@ public class LocalInspect extends Widget {
 		    }
 		}
 		SavedInfo cell = ob.getattr(SavedInfo.class);
-		return(new ObTip(name, (cell == null) ? Collections.emptyList() : cell.lines));
+		List<String> lines = (cell == null) ? Collections.emptyList() : cell.lines;
+		if(ob.is(GobTag.ANIMAL)) {
+		    List<String> poses = ob.poseNames();
+		    List<String> pdata = ob.poseData();
+		    lines = new ArrayList<>(lines);
+		    lines.add("Drawable: " + ob.drawableState());
+		    lines.add("Tameable wild: " + GobTag.isTameableWild(ob.resid()));
+		    lines.add("Taming ready: " + ob.isTamingReady());
+		    lines.add("Animations: " + (poses.isEmpty() ? "<none>" : String.join(", ", poses)));
+		    lines.add("Animation data: " + (pdata.isEmpty() ? "<none>" : String.join(", ", pdata)));
+		}
+		return(new ObTip(name, lines));
 	    }
 	    if(mc != null) {
 		int tid = ui.sess.glob.map.gettile(mc.floor(MCache.tilesz));

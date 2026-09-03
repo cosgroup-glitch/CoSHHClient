@@ -10,6 +10,10 @@ public class CustomOptPanels {
     private static final int STEP = UI.scale(25);
     private static final int H_STEP = UI.scale(10);
     private static final int COL_WIDTH = UI.scale(230);
+
+    public static Button guiLockButton(int w) {
+	return new GUILockButton(w);
+    }
     
     public static void initColorPanel(OptWnd wnd, OptWnd.Panel panel) {
 	int START;
@@ -170,6 +174,9 @@ public class CustomOptPanels {
 	panel.add(new CFGBox("Display combat keys", CFG.SHOW_COMBAT_KEYS), x, y);
 	
 	y += STEP;
+	panel.add(new CFGBox("Disable menu keys while in combat", CFG.DISABLE_MENU_KEYS_IN_COMBAT, "Prevents the bottom-right action menu hotkeys from firing while you are in combat."), x, y);
+
+	y += STEP;
 	panel.add(new CFGBox("Show combat damage", CFG.SHOW_COMBAT_DMG), x, y);
 	
 	y += STEP;
@@ -183,9 +190,6 @@ public class CustomOptPanels {
 	
 	y += STEP;
 	panel.add(new CFGBox("Only during combat", CFG.SHOW_FLOATING_STATS_COMBAT), x + H_STEP, y);
-	
-	y += STEP;
-	panel.add(new CFGBox("Lock movable HUD widgets", CFG.LOCK_FLOATING_STAT_WDGS, "Prevents dragging and resizing floating bars, speed, and quest boxes"), x + H_STEP, y);
 	
 	
 	my = Math.max(my, y);
@@ -207,5 +211,33 @@ public class CustomOptPanels {
 	panel.add(new CFGBox("By ring", mark), x + H_STEP, y);
 	
 	return y;
+    }
+
+    private static class GUILockButton extends Button implements CFG.Observer<Boolean> {
+	GUILockButton(int w) {
+	    super(w, label(), false);
+	    action(() -> {
+		CFG.GUI_LOCK.set(!CFG.GUI_LOCK.get());
+		update();
+	    });
+	    CFG.GUI_LOCK.observe(this);
+	}
+
+	private static String label() {
+	    return CFG.GUI_LOCK.get() ? "GUI LOCK: ON" : "GUI LOCK: OFF";
+	}
+
+	private void update() {
+	    change(label());
+	}
+
+	public void updated(CFG<Boolean> cfg) {
+	    update();
+	}
+
+	public void destroy() {
+	    CFG.GUI_LOCK.unobserve(this);
+	    super.destroy();
+	}
     }
 }

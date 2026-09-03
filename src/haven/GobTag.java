@@ -8,7 +8,7 @@ import java.util.*;
 
 public enum GobTag {
     TREE, BUSH, LOG, STUMP, HERB,
-    ANIMAL, AGGRESSIVE, CRITTER,
+    ANIMAL, AGGRESSIVE, CRITTER, TAMING_READY,
     
     MIDGES, RABBIT, SPEED,
     
@@ -179,6 +179,15 @@ public enum GobTag {
         "gfx/kritter/wolverine/",
         "gfx/kritter/woodgrouse/woodgrouse-m",
     };
+
+    private static final String[] TAMEABLE_WILD = {
+        "gfx/kritter/boar/",
+        "gfx/kritter/sheep/mouflon",
+        "gfx/kritter/cattle/aurochs",
+        "gfx/kritter/horse/",
+        "gfx/kritter/reindeer/",
+        "gfx/kritter/goat/wildgoat",
+    };
     
     private static final String[] VEHICLES = {"/wheelbarrow", "/plow", "/cart", "/dugout", "/rowboat", "/vehicle/snekkja", "/vehicle/knarr", "/vehicle/wagon", "/vehicle/coracle", "/horse/mare", "/horse/stallion", "/vehicle/spark"};
     
@@ -243,6 +252,8 @@ public enum GobTag {
                     tags.add(CRITTER);
                 } else if(ofType(name, BIG_PARTS)) {
                     //ignore big parts of animals like Orca
+                } else if(ofType(name, TAMEABLE_WILD)) {
+                    tags.add(ANIMAL);
                 } else if(ofType(name, AGGRO)) {
                     tags.add(ANIMAL);
                     tags.add(AGGRESSIVE);
@@ -396,6 +407,9 @@ public enum GobTag {
                 if(d.hasPose("drinkan")) {
                     tags.add(DRINKING);
                 }
+                if(anyOf(tags, ANIMAL) && ofType(name, TAMEABLE_WILD) && gob.hasPose("fgtidle", "bucking", "/buck")) {
+                    tags.add(TAMING_READY);
+                }
             }
         }
         
@@ -412,6 +426,10 @@ public enum GobTag {
             if(name.contains(pattern)) { return true; }
         }
         return false;
+    }
+
+    public static boolean isTameableWild(String name) {
+        return ofType(name, TAMEABLE_WILD);
     }
     
     private static boolean domesticated(Gob gob, String name, Set<GobTag> tags) {

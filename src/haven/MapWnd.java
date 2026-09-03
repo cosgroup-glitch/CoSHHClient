@@ -164,6 +164,30 @@ public class MapWnd extends WindowX implements Console.Directory {
     
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/pointer", "", "-d", "-h"), btn.pos("ur"))
 	    .state(CFG.MMAP_POINTER::get).set(CFG.MMAP_POINTER::set).settip("Display pointers");
+
+	btn = topbar.add(new IButton("gfx/hud/mmap/pointer", "", "-d", "-h") {
+		{
+		    recthit = true;
+		    settip("Icon settings");
+		    setgkey(GameUI.kb_ico);
+		}
+
+		public void click() {
+		    GameUI gui = ui.gui;
+		    if((gui == null) || (gui.iconconf == null))
+			return;
+		    if(gui.iconwnd == null) {
+			gui.iconwnd = new GobIcon.SettingsWindow(gui.iconconf).reqclose(() -> {
+			    if(gui.iconwnd != null)
+				gui.iconwnd.reqdestroy();
+			    gui.iconwnd = null;
+			});
+			gui.add(gui.iconwnd, Utils.getprefc("wndc-icon", new Coord(200, 200)));
+		    } else {
+			gui.iconwnd.reqclose();
+		    }
+		}
+	    }, btn.pos("ur"));
     
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/tile-seek", "", "-d", "-h"), btn.pos("ur"))
 	    .changed(a -> toggleol(TileHighlight.TAG, a))

@@ -63,7 +63,7 @@ public class DecoX extends Window.DefaultDeco {
     }
     
     protected void placetwdgs() {
-	int x = cbtn.c.x;
+	int x = Math.min(cbtn.c.x, dbtn.c.x);
 	int y = cbtn.c.y + cbtn.sz.y / 2;
 	for (Widget ch : twdgs) {
 	    if(ch.visible) {
@@ -214,6 +214,7 @@ public class DecoX extends Window.DefaultDeco {
 	    decoX.aa = Area.sized(decoX.ca.ul.add(mrgn), asz);
 	    
 	    decoX.cbtn.c = Coord.of(wsz.x, decoX.aa.ul.y).sub(decoX.cbtn.sz);
+	    decoX.dbtn.c = decoX.cbtn.c.sub(decoX.dbtn.sz.x + UI.scale(3), 0);
 	}
 	
 	@Override

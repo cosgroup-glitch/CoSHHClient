@@ -28,14 +28,6 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 	this.meter = add(meter, Coord.z);
 	meter.hide();
 	resize(meter.sz);
-	disposables.add(CFG.LOCK_FLOATING_STAT_WDGS.observe(this::updateState));
-	updateState(null);
-    }
-
-    private void updateState(CFG<Boolean> cfg) {
-	boolean unlocked = !CFG.LOCK_FLOATING_STAT_WDGS.get();
-	draggable(unlocked);
-	resizable(unlocked);
     }
 
     @Override
@@ -61,6 +53,8 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
     @Override
     public void draw(GOut g) {
 	drawmeter(g);
+	drawEditOverlay(g);
+	drawresize(g);
     }
     
     private void drawmeter(GOut g) {

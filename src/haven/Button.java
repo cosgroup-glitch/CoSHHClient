@@ -227,7 +227,20 @@ public class Button extends SIWidget {
 	ui.sfx(click);
     }
 
+    private boolean blockedByVillageMember(Coord c) {
+	Polity pol = getparent(Polity.class);
+	return((pol != null) && pol.blocksVillageActionButton(this, c));
+    }
+
+    public boolean checkhit(Coord c) {
+	if(blockedByVillageMember(c))
+	    return(false);
+	return(super.checkhit(c));
+    }
+
     public boolean mousedown(MouseDownEvent ev) {
+	if(blockedByVillageMember(ev.c))
+	    return(false);
 	if((ev.b != 1) || dis)
 	    return(super.mousedown(ev));
 	a = true;

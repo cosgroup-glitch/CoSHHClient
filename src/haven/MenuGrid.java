@@ -768,6 +768,8 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
     public static final KeyBinding kb_back = KeyBinding.get("scm-back", KeyMatch.forcode(KeyEvent.VK_BACK_SPACE, 0));
     public static final KeyBinding kb_next = KeyBinding.get("scm-next", KeyMatch.forchar('N', KeyMatch.S | KeyMatch.C | KeyMatch.M, KeyMatch.S));
     public boolean globtype(GlobKeyEvent ev) {
+	if(disableMenuKeysInCombat())
+	    return(super.globtype(ev));
 	if(kb_root.key().match(ev) && (this.cur != null)) {
 	    change(null);
 	    return(true);
@@ -796,6 +798,10 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	    return(true);
 	}
 	return(super.globtype(ev));
+    }
+
+    private boolean disableMenuKeysInCombat() {
+	return(CFG.DISABLE_MENU_KEYS_IN_COMBAT.get() && (ui != null) && (ui.gui != null) && ui.gui.isInCombat());
     }
     
     private void selectCraft(Pagina r) {

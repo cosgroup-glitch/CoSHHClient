@@ -146,7 +146,7 @@ public class UI {
     public interface AfterDraw {
 	public void draw(GOut g);
     }
-    
+
     public void setgprefs(GSettings prefs) {
 	synchronized(this) {
 	    if(!Utils.eq(prefs, this.gprefs)) {
@@ -718,6 +718,7 @@ public class UI {
     }
     
     public void wdgmsg(Widget sender, String msg, Object... args) {
+	Window.debugWidgetMessage(sender, msg, args);
 	int id = widgetid(sender);
 	if(id < 0) {
 	    new Warning("wdgmsg sender (%s) is not in rwidgets, message is %s", sender.getClass().getName(), msg).issue();

@@ -102,7 +102,9 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public Progress prog = null;
     private boolean afk = false;
     public BeltSlot[] belt = new BeltSlot[144];
-    public Belt beltwdg;
+    public Widget beltwdg;
+    public MapMenuBar mapmenubar;
+    public GUIEditPanel guieditpanel;
     public final Map<Integer, String> polowners = new HashMap<Integer, String>();
     public Bufflist buffs;
     public CraftDBWnd craftwnd = null;
@@ -374,7 +376,6 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	ulpanel = add(new Hidepanel("gui-ul", null, new Coord(-1, -1)));
 	umpanel = add(new Hidepanel("gui-um", null, new Coord( 0, -1)));
 	urpanel = add(new Hidepanel("gui-ur", null, new Coord( 1, -1)));
-	mapmenupanel.add(new MapMenu(), 0, 0);
 	blpanel.add(new Img(Resource.loadtex("gfx/hud/blframe")), 0, 0);
 	minimapc = new Coord(UI.scale(4), UI.scale(34));
 	Tex rbtnbg = Resource.loadtex("gfx/hud/csearch-bg");
@@ -386,6 +387,10 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	positionQuestObjectiveMenuButton();
 	menubuttons(rbtnimg);
 	foldbuttons();
+	mapmenubar = add(new MapMenuBar(), Coord.z);
+	mapmenubar.raise();
+	guieditpanel = add(new GUIEditPanel(), Coord.z);
+	guieditpanel.raise();
 	if(CFG.HIDE_GAMEUI_PORTRAIT.get()) {
 	    portrait = ulpanel.add(new Widget(Avaview.dasz.add(Window.wbox.bisz())), UI.scale(10, 10));
 	} else {
@@ -676,15 +681,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     }
 
     public void toggleChat() {
-	if(chat.visible() && !chat.hasfocus) {
-	    setfocus(chat);
+	if(chat.targetshow) {
+	    chat.sshow(false);
 	} else {
-	    if(chat.targetshow) {
-		chat.sshow(false);
-	    } else {
-		chat.sshow(true);
-		setfocus(chat);
-	    }
+	    chat.sshow(true);
+	    setfocus(chat);
 	}
 	Utils.setprefb("chatvis", chat.targetshow);
     }
@@ -1652,8 +1653,18 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 
     public void draw(GOut g) {
 	int beltoffset = (CFG.VANILLA_CHAT.get() ? 0 : blpw);
-	beltwdg.c = new Coord(chat.c.x + beltoffset, Math.min(chat.c.y - beltwdg.sz.y, sz.y - beltwdg.sz.y));
+	if(dockBelt())
+	    beltwdg.c = new Coord(chat.c.x + beltoffset, Math.min(chat.c.y - beltwdg.sz.y, sz.y - beltwdg.sz.y));
+	if(dockMapMenuBar())
+	    mapmenubar.c = defaultMapMenuBarPosition();
+	if(guieditpanel != null) {
+	    guieditpanel.visible = DraggableWidget.guiEditMode();
+	    guieditpanel.c = sz.sub(guieditpanel.sz).div(2);
+	    guieditpanel.raise();
+	}
 	super.draw(g);
+	if(DraggableWidget.guiEditMode() && CFG.GUI_EDIT_GRID.get())
+	    drawEditGrid(g);
 	int by = sz.y;
 	if(chat.visible())
 	    by = Math.min(by, chat.c.y);
@@ -1674,6 +1685,18 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	if(!chat.visible()) {
 	    chat.drawsmall(g, new Coord(blpw + UI.scale(10), by), UI.scale(100));
 	}
+    }
+
+    private void drawEditGrid(GOut g) {
+	int step = DraggableWidget.editGridSize();
+	if(step <= 1)
+	    return;
+	g.chcolor(86, 188, 255, 105);
+	for(int x = step; x < sz.x; x += step)
+	    g.line(Coord.of(x, 0), Coord.of(x, sz.y), 1);
+	for(int y = step; y < sz.y; y += step)
+	    g.line(Coord.of(0, y), Coord.of(sz.x, y), 1);
+	g.chcolor();
     }
 
     private String iconconfname() {
@@ -2098,6 +2121,15 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_rlm = KeyBinding.get("ol-rlm", KeyMatch.nil);
     public static final KeyBinding kb_ico = KeyBinding.get("map-icons", KeyMatch.nil);
     private static final Tex mapmenubg = Resource.loadtex("gfx/hud/lbtn-bg");
+    private void toggleol(String tag, boolean a) {
+	if(map != null) {
+	    if(a)
+		map.enol(tag);
+	    else
+		map.disol(tag);
+	}
+    }
+
     private void setClaimOverlay(String tag, CFG<Boolean> cfg, boolean a) {
 	cfg.set(a);
 	if(map != null) {
@@ -2115,12 +2147,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 
     public class MapMenu extends Widget {
 	private void toggleol(String tag, boolean a) {
-	    if(map != null) {
-		if(a)
-		    map.enol(tag);
-		else
-		    map.disol(tag);
-	    }
+	    GameUI.this.toggleol(tag, a);
 	}
 
 	public MapMenu() {
@@ -2200,14 +2227,20 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	case 0:
 	    for(Hidepanel p : panels)
 		p.mshow(true);
+	    if(mapmenubar != null)
+		mapmenubar.show();
 	    break;
 	case 1:
 	    for(Hidepanel p : panels)
 		p.mshow();
+	    if(mapmenubar != null)
+		mapmenubar.show();
 	    break;
 	case 2:
 	    for(Hidepanel p : panels)
 		p.mshow(false);
+	    if(mapmenubar != null)
+		mapmenubar.hide();
 	    break;
 	}
     }
@@ -2216,6 +2249,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	Hidepanel[] panels = {blpanel, brpanel, ulpanel, umpanel, urpanel, menupanel, mapmenupanel};
 	for(Hidepanel p : panels)
 	    p.cshow(p.tvis);
+	if(mapmenubar != null)
+	    mapmenubar.show();
 	uimode = 1;
     }
 
@@ -2230,18 +2265,25 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 
     public void resizeLayout(Coord sz) {
 	if (CFG.VANILLA_CHAT.get()) {
-	    chat.resize(sz.x - blpw - brpw);
-	    chat.move(new Coord(blpw, sz.y));
+	    if(!chat.hasCustomPosition()) {
+		chat.resize(sz.x - blpw - brpw);
+		chat.move(new Coord(blpw, sz.y));
+	    }
 	}
 	else {
-	    chat.resize(UI.scale(600));
-	    chat.move(new Coord(0, sz.y));
+	    if(!chat.hasCustomPosition()) {
+		chat.resize(UI.scale(600));
+		chat.move(new Coord(0, sz.y));
+	    }
 	}
 	if(map != null)
 	    map.resize(sz);
 	if(prog != null)
 	    prog.move(sz.sub(prog.sz).mul(0.5, 0.35));
-	beltwdg.c = new Coord(blpw + UI.scale(10), sz.y - beltwdg.sz.y - UI.scale(5));
+	if(dockBelt())
+	    beltwdg.c = new Coord(blpw + UI.scale(10), sz.y - beltwdg.sz.y - UI.scale(5));
+	if(dockMapMenuBar())
+	    mapmenubar.c = defaultMapMenuBarPosition();
 	statuswdg.c = new Coord(sz.x/2 + UI.scale(70), UI.scale(10));
 	timewdg.c = new Coord(sz.x/2 - UI.scale(270), UI.scale(10));
 	positionQuestObjectiveMenuButton();
@@ -2523,15 +2565,159 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    public class MapMenuBar extends DraggableWidget {
+	private static final int PAD = 3;
+	private static final int GAP = 2;
+	private static final int BTNSZ = 24;
+	private boolean over = false;
+
+	public MapMenuBar() {
+	    super("MapMenuBar");
+	    add(chatToggleButton(), slotc(0));
+	    add(mapButton(), slotc(1));
+	    sz = slotc(2).add(UI.scale(PAD, PAD + BTNSZ));
+	}
+
+	private Coord slotc(int i) {
+	    return(UI.scale(PAD + ((BTNSZ + GAP) * i), PAD));
+	}
+
+	private IButton mapButton() {
+	    IButton ret = new IButton("gfx/hud/mmap/marknames", "", "-d", "-h") {
+		    public void click() {
+			togglewnd(mapfile);
+			if(mapfile != null)
+			    Utils.setprefb("wndvis-map", mapfile.visible());
+		    }
+		};
+	    ret.resize(UI.scale(BTNSZ, BTNSZ));
+	    ret.recthit = true;
+	    ret.setgkey(kb_map);
+	    ret.invisibleKeys = true;
+	    ret.allowGlobalKeysWhenHidden(true);
+	    ret.settip("Map");
+	    return(ret);
+	}
+
+	private IButton chatToggleButton() {
+	    IButton ret = new IButton("gfx/hud/hb-btn-chat", "", "-d", "-h") {
+		    Tex glow = new TexI(PUtils.rasterimg(PUtils.blurmask(up.getRaster(), UI.scale(2), UI.scale(2), Color.WHITE)));
+
+		    public void click() {
+			toggleChat();
+		    }
+
+		    @Override
+		    public Object tooltip(Coord c, Widget prev) {
+			if(!checkhit(c))
+			    return null;
+			String tt = "Chat";
+			if(kb_chat.key() != KeyMatch.nil)
+			    tt = String.format("%s ($col[255,255,0]{%s})", tt, kb_chat.key().name());
+			return RichText.render(tt, 0);
+		    }
+
+		    public void draw(GOut g) {
+			super.draw(g);
+			Color urg = chat.urgcols[chat.urgency];
+			if(urg != null) {
+			    GOut g2 = g.reclipl2(UI.scale(-4, -4), g.sz().add(UI.scale(4, 4)));
+			    g2.chcolor(urg.getRed(), urg.getGreen(), urg.getBlue(), 128);
+			    g2.image(glow, Coord.z);
+			}
+		    }
+		};
+	    ret.resize(UI.scale(BTNSZ, BTNSZ));
+	    ret.recthit = true;
+	    return(ret);
+	}
+
+	public void draw(GOut g) {
+	    if(over) {
+		g.chcolor(ToolBelt.BG_COLOR);
+		g.frect(Coord.z, sz);
+		g.chcolor();
+	    }
+	    super.draw(g);
+	}
+
+	public void mousemove(MouseMoveEvent ev) {
+	    over = ev.c.isect(Coord.z, sz);
+	    super.mousemove(ev);
+	}
+
+    }
+
+    public class GUIEditPanel extends Widget {
+	private final CheckBox grid;
+	private final TextEntry size;
+
+	public GUIEditPanel() {
+	    resize(UI.scale(220, 58));
+	    grid = add(new CheckBox("Snap grid") {
+		{
+		    a = CFG.GUI_EDIT_GRID.get();
+		}
+
+		public void set(boolean val) {
+		    CFG.GUI_EDIT_GRID.set(a = val);
+		}
+	    }, UI.scale(8, 8));
+	    add(new Label("Grid px:"), UI.scale(8, 34));
+	    size = add(new TextEntry(UI.scale(54), Integer.toString(CFG.GUI_EDIT_GRID_SIZE.get())) {
+		public void activate(String text) {
+		    setGridSize(text);
+		}
+	    }, UI.scale(72, 29));
+	    size.canactivate = true;
+	    add(new Button(UI.scale(54), "Apply", false, () -> setGridSize(size.text())), UI.scale(132, 30));
+	}
+
+	private void setGridSize(String text) {
+	    try {
+		CFG.GUI_EDIT_GRID_SIZE.set(Math.max(1, Integer.parseInt(text.trim())));
+	    } catch(NumberFormatException ignored) {
+	    }
+	    size.settext(Integer.toString(CFG.GUI_EDIT_GRID_SIZE.get()));
+	}
+
+	public void draw(GOut g) {
+	    g.chcolor(ToolBelt.BG_COLOR);
+	    g.frect(Coord.z, sz);
+	    g.chcolor(12, 16, 10, 210);
+	    g.frect(UI.scale(2, 2), sz.sub(UI.scale(4, 4)));
+	    g.chcolor(DraggableWidget.EDIT_LINE);
+	    g.line(Coord.z, Coord.of(sz.x - 1, 0), 1);
+	    g.line(Coord.z, Coord.of(0, sz.y - 1), 1);
+	    g.line(Coord.of(sz.x - 1, 0), sz.sub(1, 1), 1);
+	    g.line(Coord.of(0, sz.y - 1), sz.sub(1, 1), 1);
+	    g.chcolor();
+	    super.draw(g);
+	}
+    }
+
     {
 	String val = Utils.getpref("belttype", "n");
 	if(val.equals("n")) {
-	    beltwdg = add(new NKeyBelt());
+	    beltwdg = add(new ToolBelt("MainBelt", 0, 5, 10, ToolBelt.NKEYS, true));
 	} else if(val.equals("f")) {
 	    beltwdg = add(new FKeyBelt());
 	} else {
-	    beltwdg = add(new NKeyBelt());
+	    beltwdg = add(new ToolBelt("MainBelt", 0, 5, 10, ToolBelt.NKEYS, true));
 	}
+    }
+
+    private boolean dockBelt() {
+	return(!(beltwdg instanceof DraggableWidget) || !((DraggableWidget)beltwdg).hasCustomPosition());
+    }
+
+    private boolean dockMapMenuBar() {
+	return((mapmenubar != null) && !mapmenubar.hasCustomPosition());
+    }
+
+    private Coord defaultMapMenuBarPosition() {
+	int y = chat.hasCustomPosition() ? sz.y - mapmenubar.sz.y - UI.scale(110) : chat.c.y - mapmenubar.sz.y - UI.scale(5);
+	return(new Coord(UI.scale(10), Math.max(UI.scale(10), y)));
     }
 
     private void createToolBelts() {
@@ -2568,7 +2754,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 			resize(sz);
 		    } else if(args[1].equals("n")) {
 			beltwdg.destroy();
-			beltwdg = add(new NKeyBelt());
+			beltwdg = add(new ToolBelt("MainBelt", 0, 5, 10, ToolBelt.NKEYS, true));
 			Utils.setpref("belttype", "n");
 			resize(sz);
 		    }

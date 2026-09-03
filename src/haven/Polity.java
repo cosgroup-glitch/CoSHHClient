@@ -154,22 +154,39 @@ public abstract class Polity extends Widget {
 		break;
 	    }
 	}
-	if((acts == null) || (mw == null) || !mw.visible)
+	if(acts == null)
 	    return(false);
 	boolean changed = false;
 	if(vactiony < 0)
 	    vactiony = acts.c.y;
+	if((mw == null) || !mw.visible) {
+	    if(acts.visible && (acts.c.y != vactiony)) {
+		acts.move(new Coord(acts.c.x, vactiony));
+		changed = true;
+	    }
+	    return(changed);
+	}
 	if(!acts.visible) {
 	    acts.show();
 	    changed = true;
 	}
-	if(acts.c.y != vactiony) {
-	    acts.move(new Coord(acts.c.x, vactiony));
+	Window wnd = getparent(Window.class);
+	if(wnd != null)
+	    wnd.raise();
+	int mz = Math.max(mw.z, acts.z + 1);
+	if(mw.z != mz) {
+	    mw.z = mz;
+	    mw.raise();
 	    changed = true;
 	}
-	int my = vactiony + acts.sz.y + UI.scale(5);
+	int my = vactiony;
 	if(mw.c.y != my) {
 	    mw.move(new Coord(mw.c.x, my));
+	    changed = true;
+	}
+	int ay = mw.c.y + mw.sz.y + UI.scale(5);
+	if(acts.c.y != ay) {
+	    acts.move(new Coord(acts.c.x, ay));
 	    changed = true;
 	}
 	return(changed);
@@ -189,6 +206,14 @@ public abstract class Polity extends Widget {
 		hasLabel = true;
 	}
 	return(hasButton && hasLabel);
+    }
+
+    public boolean blocksVillageActionButton(Button button, Coord bc) {
+	if(!"Village".equals(cap) || (mw == null) || !mw.visible)
+	    return(false);
+	if(!isVillageActionBlock(button.parent))
+	    return(false);
+	return(button.rootpos(bc).isect(mw.rootpos(), mw.sz));
     }
 
     @Override

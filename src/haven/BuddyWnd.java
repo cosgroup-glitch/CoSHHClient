@@ -228,7 +228,17 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 	}
 
 	public boolean mousedown(MouseDownEvent ev) {
-	    selector.select(group);
+	    Polity.MemberWidget member = selector.getparent(Polity.MemberWidget.class);
+	    if((member != null) && (member.ui != null) && (member.ui.widgetid(member) >= 0) && (member.ui.widgetid(selector) < 0)) {
+		boolean nsel = !selected;
+		if(nsel)
+		    select();
+		else
+		    unselect();
+		member.wdgmsg("perm", group);
+	    } else {
+		selector.select(group);
+	    }
 	    return(true);
 	}
 

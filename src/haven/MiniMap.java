@@ -503,6 +503,8 @@ public class MiniMap extends Widget {
 
 	public void draw(GOut g) {
 	    icon.draw(g, sc);
+	    if(gob.isTamingReady())
+		drawTamingReadyRing(g, sc);
 	    if(notify) {
 		double f = 1.0 + (Math.pow(Math.sin(ntime * Math.PI * 1.5), 2) * 1.0);
 		double a = (ntime < 0.5) ? 0.5 : (0.5 - (ntime - 0.5));
@@ -516,6 +518,21 @@ public class MiniMap extends Widget {
 		snotify.accept(ui);
 		snotify = null;
 	    }
+	}
+
+	private void drawTamingReadyRing(GOut g, Coord c) {
+	    int radius = UI.scale(18);
+	    int segments = 32;
+	    double width = UI.scale(3);
+	    g.chcolor(255, 0, 0, 230);
+	    Coord prev = c.add(radius, 0);
+	    for(int i = 1; i <= segments; i++) {
+		double a = (Math.PI * 2 * i) / segments;
+		Coord next = c.add((int)Math.round(Math.cos(a) * radius), (int)Math.round(Math.sin(a) * radius));
+		g.line(prev, next, width);
+		prev = next;
+	    }
+	    g.chcolor();
 	}
 
 	public boolean force() {

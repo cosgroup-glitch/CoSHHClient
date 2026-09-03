@@ -856,6 +856,34 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	}
 	return false;
     }
+
+    public java.util.List<String> poseNames() {
+	Drawable d = drawable;
+	if(d instanceof Composite)
+	    return(((Composite)d).getPoses());
+	return(Collections.emptyList());
+    }
+
+    public java.util.List<String> poseData() {
+	Drawable d = drawable;
+	if(d instanceof Composite)
+	    return(((Composite)d).getPoseData());
+	return(Collections.emptyList());
+    }
+
+    public String drawableState() {
+	Drawable d = drawable;
+	if(d == null)
+	    return("<none>");
+	if(d instanceof Composite)
+	    return(((Composite)d).poseState());
+	return(d.getClass().getName());
+    }
+
+    public boolean isTamingReady() {
+	String name = resid();
+	return(is(GobTag.ANIMAL) && GobTag.isTameableWild(name) && hasPose("fgtidle", "bucking", "/buck"));
+    }
     
     /**returns whether icon for this gob is visible on radar, if there's no icon in config returns null*/
     public Boolean isOnRadar() {
@@ -1182,7 +1210,17 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     }
     
     public String inspect(boolean full) {
-	String info = String.format("%s [%d]", resid(), sdt());
+	String name = resid();
+	String info = String.format("Resource: %s [%d]", name, sdt());
+	if(is(GobTag.ANIMAL)) {
+	    java.util.List<String> poses = poseNames();
+	    java.util.List<String> pdata = poseData();
+	    info += "\nDrawable: " + drawableState();
+	    info += "\nTameable wild: " + GobTag.isTameableWild(name);
+	    info += "\nTaming ready: " + isTamingReady();
+	    info += "\nAnimations: " + (poses.isEmpty() ? "<none>" : String.join(", ", poses));
+	    info += "\nAnimation data: " + (pdata.isEmpty() ? "<none>" : String.join(", ", pdata));
+	}
 	if(!full) {return info;}
 	
 	String mats = CustomizeVarMat.formatMaterials(this);

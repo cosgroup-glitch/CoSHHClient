@@ -53,6 +53,9 @@ public class Composite extends Drawable implements EquipTarget {
     boolean changed = true;
     private String resId = null;
     private List<String> poses = new LinkedList<>();
+    private List<String> tposeNames = Collections.emptyList();
+    private List<String> poseData = Collections.emptyList();
+    private List<String> tposeData = Collections.emptyList();
     private double animAccumDt = 0;
     
     public Composite(Gob gob, Indir<Resource> base) {
@@ -116,6 +119,9 @@ public class Composite extends Drawable implements EquipTarget {
 		Composited.Poses np = comp.new Poses(loadposes(nposes, comp.skel, nposesold));
 		np.set(nposesold?0:ipollen);
 		this.poses = nposes.stream().map(pose -> pose.res.get().name).collect(Collectors.toList());
+		this.poseData = poseDebug(nposes);
+		this.tposeNames = Collections.emptyList();
+		this.tposeData = Collections.emptyList();
 		gob.poseUpdated();
 		nposes = null;
 		updequ();
@@ -123,8 +129,14 @@ public class Composite extends Drawable implements EquipTarget {
 	} else if(tposes != null) {
 	    try {
 		final Composited.Poses cp = comp.poses;
+		tposeNames = tposes.stream().map(pose -> pose.res.get().name).collect(Collectors.toList());
+		tposeData = poseDebug(tposes);
+		gob.poseUpdated();
 		Composited.Poses np = comp.new Poses(loadposes(tposes, comp.skel, tpmode)) {
 		    protected void done() {
+			tposeNames = Collections.emptyList();
+			tposeData = Collections.emptyList();
+			gob.poseUpdated();
 			cp.set(ipollen);
 			updequ();
 		    }
@@ -171,8 +183,11 @@ public class Composite extends Drawable implements EquipTarget {
     }
     
     public void chposes(Collection<ResData> poses, boolean interp) {
-	if(tposes != null)
+	if(tposes != null) {
 	    tposes = null;
+	    tposeNames = Collections.emptyList();
+	    tposeData = Collections.emptyList();
+	}
 	nposes = poses;
 	nposesold = !interp;
     }
@@ -392,10 +407,34 @@ public class Composite extends Drawable implements EquipTarget {
 		return true;
 	    }
 	}
+	for (String pose : tposeNames) {
+	    if(pose.contains(request)) {
+		return true;
+	    }
+	}
 	return false;
     }
 
     public List<String> getPoses() {
-	return new java.util.ArrayList<>(poses);
+	List<String> ret = new java.util.ArrayList<>(poses);
+	ret.addAll(tposeNames);
+	return ret;
+    }
+
+    public List<String> getPoseData() {
+	List<String> ret = new java.util.ArrayList<>(poseData);
+	ret.addAll(tposeData);
+	return ret;
+    }
+
+    public String poseState() {
+	return(String.format("Composite pseq=%d base=%d temp=%d", pseq, poses.size(), tposeNames.size()));
+    }
+
+    private List<String> poseDebug(Collection<ResData> data) {
+	List<String> ret = new ArrayList<>(data.size());
+	for(ResData pose : data)
+	    ret.add(String.format("%s %s", pose.res.get().name, pose.sdt));
+	return(ret);
     }
 }

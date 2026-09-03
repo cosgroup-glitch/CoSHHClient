@@ -31,10 +31,12 @@ import haven.rx.Reactor;
 import me.ender.WindowDetector;
 
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import haven.render.*;
 import java.util.function.*;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.time.LocalDateTime;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -83,6 +85,7 @@ public class Window extends Widget {
 	Resource.loadsimg("gfx/hud/wnd/lg/cbtnu"),
 	Resource.loadsimg("gfx/hud/wnd/lg/cbtnd"),
 	Resource.loadsimg("gfx/hud/wnd/lg/cbtnh")};
+    public static final BufferedImage[] dbtni = debugButtonImages();
     
     public static final String ON_DESTROY = "destroy";
     public static final String ON_PACK = "pack";
@@ -100,6 +103,7 @@ public class Window extends Widget {
     public boolean skipInitPos = false;
     public boolean skipSavePos = false;
     private boolean closed = false;
+    private DebugPanel debugPanel;
     private String title;
 	protected Text.Furnace rcf = cf;
 
@@ -204,6 +208,266 @@ public class Window extends Widget {
 	return title;
     }
 
+    private static BufferedImage[] debugButtonImages() {
+	Coord sz = UI.scale(18, 18);
+	BufferedImage[] ret = new BufferedImage[3];
+	for(int i = 0; i < ret.length; i++) {
+	    BufferedImage img = TexI.mkbuf(sz);
+	    Graphics2D g = img.createGraphics();
+	    int bg = (i == 1) ? 72 : ((i == 2) ? 112 : 88);
+	    g.setColor(new Color(bg, bg, bg, 230));
+	    g.fillRect(0, 0, sz.x, sz.y);
+	    g.setColor(new Color(20, 20, 20, 220));
+	    g.drawRect(0, 0, sz.x - 1, sz.y - 1);
+	    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+	    int cx = sz.x / 2, cy = sz.y / 2;
+	    int bodyw = Math.max(7, UI.scale(8)), bodyh = Math.max(8, UI.scale(10));
+	    int head = Math.max(5, UI.scale(5));
+	    int leg = Math.max(3, UI.scale(4));
+	    g.setColor(new Color(20, 20, 20, 230));
+	    g.drawLine(cx - (bodyw / 2), cy - 1, cx - (bodyw / 2) - leg, cy - 4);
+	    g.drawLine(cx + (bodyw / 2), cy - 1, cx + (bodyw / 2) + leg, cy - 4);
+	    g.drawLine(cx - (bodyw / 2), cy + 2, cx - (bodyw / 2) - leg, cy + 2);
+	    g.drawLine(cx + (bodyw / 2), cy + 2, cx + (bodyw / 2) + leg, cy + 2);
+	    g.drawLine(cx - (bodyw / 2), cy + 5, cx - (bodyw / 2) - leg, cy + 7);
+	    g.drawLine(cx + (bodyw / 2), cy + 5, cx + (bodyw / 2) + leg, cy + 7);
+	    g.drawLine(cx - 2, cy - (bodyh / 2), cx - 4, cy - (bodyh / 2) - 3);
+	    g.drawLine(cx + 2, cy - (bodyh / 2), cx + 4, cy - (bodyh / 2) - 3);
+	    g.setColor(new Color(245, 235, 160));
+	    g.fillOval(cx - (bodyw / 2), cy - (bodyh / 2) + 1, bodyw, bodyh);
+	    g.fillOval(cx - (head / 2), cy - (bodyh / 2) - 2, head, head);
+	    g.setColor(new Color(95, 70, 35, 210));
+	    g.drawLine(cx, cy - (bodyh / 2) + 2, cx, cy + (bodyh / 2) - 1);
+	    g.drawOval(cx - (bodyw / 2), cy - (bodyh / 2) + 1, bodyw, bodyh);
+	    g.dispose();
+	    ret[i] = img;
+	}
+	return(ret);
+    }
+
+    private void showDebugWindow() {
+	String report = debugReport();
+	System.out.println(report);
+	Widget host = (parent == null) ? ((ui == null) ? null : ui.root) : parent;
+	if(host != null) {
+	    if((debugPanel != null) && (debugPanel.parent != null)) {
+		debugPanel.raise();
+	    } else {
+		Coord dc = host.rootxlate(rootpos().add(UI.scale(30, 30)));
+		debugPanel = host.add(new DebugPanel(this, report), dc);
+		debugPanel.raise();
+	    }
+	}
+	copyDebugReport(report);
+    }
+
+    private void copyDebugReport(String report) {
+	try {
+	    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(report), null);
+	    if(ui != null)
+		ui.message("Window debug copied to clipboard.", GameUI.MsgType.INFO);
+	} catch(Exception e) {
+	    new Warning(e, "could not copy window debug report to clipboard").issue();
+	}
+    }
+
+    private void logDebugPointer(String stage, PointerEvent ev) {
+	DebugPanel panel = debugPanel;
+	if((panel == null) || (panel.parent == null))
+	    return;
+	if(!(ev instanceof MouseButtonEvent) && !(ev instanceof MouseWheelEvent))
+	    return;
+	panel.logPointer(stage, ev);
+    }
+
+    static void debugWidgetMessage(Widget sender, String msg, Object... args) {
+	Window wnd = sender.getparent(Window.class);
+	if((wnd != null) && (wnd.debugPanel != null) && (wnd.debugPanel.parent != null))
+	    wnd.debugPanel.logMessage(sender, msg, args);
+    }
+
+    private static class DebugPanel extends WindowX {
+	private final Window target;
+	private final Textlog log;
+	private final StringBuilder report = new StringBuilder();
+	private int eventseq = 0;
+
+	DebugPanel(Window target, String initial) {
+	    super(UI.scale(620, 420), "Window Debug");
+	    this.target = target;
+	    justclose = true;
+	    Button copy = add(new Button(UI.scale(84), "Copy", this::copy), Coord.z);
+	    log = add(new Textlog(Coord.of(csz().x, csz().y - copy.sz.y - UI.scale(5))), Coord.of(0, copy.sz.y + UI.scale(5)));
+	    log.maxLines = 0;
+	    append(initial);
+	    append("");
+	    append("Live tracking is active for: " + target.getClass().getName() + " caption=" + target.caption());
+	    pack();
+	}
+
+	private void append(String line) {
+	    report.append(line).append('\n');
+	    log.append(line);
+	}
+
+	private void appendBlock(String block) {
+	    for(String line : block.split("\\r?\\n", -1))
+		append(line);
+	}
+
+	void logPointer(String stage, PointerEvent ev) {
+	    StringBuilder buf = new StringBuilder();
+	    buf.append('\n').append("Event #").append(++eventseq).append(' ').append(stage).append(' ');
+	    buf.append(ev.getClass().getSimpleName());
+	    if(ev instanceof MouseButtonEvent)
+		buf.append(" button=").append(((MouseButtonEvent)ev).b);
+	    if(ev instanceof MouseWheelEvent)
+		buf.append(" wheel=").append(((MouseWheelEvent)ev).a).append(" scale=").append(((MouseWheelEvent)ev).s);
+	    buf.append(" root=").append(target.rootpos().add(ev.c)).append(" local=").append(ev.c).append('\n');
+	    buf.append("Hit path at event point:\n");
+	    appendHitTree(buf, target, "  ", target.rootpos().add(ev.c));
+	    appendBlock(buf.toString());
+	}
+
+	void logMessage(Widget sender, String msg, Object... args) {
+	    StringBuilder buf = new StringBuilder();
+	    int id = (sender.ui == null) ? -1 : sender.ui.widgetid(sender);
+	    buf.append('\n').append("Message #").append(++eventseq).append(' ');
+	    buf.append("sender=").append(sender.getClass().getName());
+	    buf.append(" ui-id=").append((id < 0) ? "client-only" : Integer.toString(id));
+	    buf.append(" root=").append(safeRoot(sender));
+	    buf.append(" msg=").append(msg);
+	    buf.append(" args=").append(java.util.Arrays.deepToString(args));
+	    appendBlock(buf.toString());
+	}
+
+	private void copy() {
+	    target.copyDebugReport(report.toString());
+	}
+
+	@Override
+	public void destroy() {
+	    if(target.debugPanel == this)
+		target.debugPanel = null;
+	    super.destroy();
+	}
+    }
+
+    private String debugReport() {
+	StringBuilder buf = new StringBuilder();
+	Coord mouse = (ui == null) ? null : ui.mc;
+	buf.append("Window debug @ ").append(LocalDateTime.now()).append('\n');
+	appendWidgetLine(buf, this, "", mouse);
+	buf.append('\n');
+	buf.append("Window:\n");
+	buf.append("  caption=").append(caption()).append('\n');
+	buf.append("  translated-caption=").append(cap).append('\n');
+	buf.append("  class=").append(getClass().getName()).append('\n');
+	buf.append("  root=").append(safeRoot(this)).append(" local=").append(c).append(" size=").append(sz).append(" z=").append(z).append('\n');
+	buf.append("  visible=").append(visible).append(" focus=").append(hasfocus).append(" closed=").append(closed).append(" large=").append(large).append('\n');
+	buf.append("  content-area=").append(ca()).append(" content-size=").append(csz()).append('\n');
+	if(deco != null)
+	    buf.append("  deco=").append(deco.getClass().getName()).append(" root=").append(safeRoot(deco)).append(" size=").append(deco.sz).append(" z=").append(deco.z).append('\n');
+	buf.append("  parent-chain=").append(parentChain(this)).append('\n');
+	if(mouse != null)
+	    buf.append("  mouse-root=").append(mouse).append(" mouse-local=").append(rootxlate(mouse)).append('\n');
+	buf.append('\n');
+	buf.append("Children draw order:\n");
+	appendTree(buf, this, "  ", false, mouse);
+	buf.append('\n');
+	buf.append("Children hit order:\n");
+	appendTree(buf, this, "  ", true, mouse);
+	if(mouse != null) {
+	    buf.append('\n');
+	    buf.append("Widgets in this window under mouse:\n");
+	    appendHitTree(buf, this, "  ", mouse);
+	}
+	return(buf.toString());
+    }
+
+    private static void appendTree(StringBuilder buf, Widget root, String indent, boolean reverse, Coord mouse) {
+	for(Widget ch = reverse ? root.lchild : root.child; ch != null; ch = reverse ? ch.prev : ch.next) {
+	    appendWidgetLine(buf, ch, indent, mouse);
+	    appendTree(buf, ch, indent + "  ", reverse, mouse);
+	}
+    }
+
+    private static void appendHitTree(StringBuilder buf, Widget root, String indent, Coord mouse) {
+	for(Widget ch = root.lchild; ch != null; ch = ch.prev) {
+	    if(!ch.visible())
+		continue;
+	    Coord local = ch.rootxlate(mouse);
+	    if(local.isect(Coord.z, ch.sz)) {
+		appendWidgetLine(buf, ch, indent, mouse);
+		appendHitTree(buf, ch, indent + "  ", mouse);
+	    }
+	}
+    }
+
+    private static void appendWidgetLine(StringBuilder buf, Widget w, String indent, Coord mouse) {
+	buf.append(indent).append(w.getClass().getName());
+	buf.append(" root=").append(safeRoot(w));
+	buf.append(" local=").append(w.c);
+	buf.append(" size=").append(w.sz);
+	buf.append(" z=").append(w.z);
+	buf.append(" visible=").append(w.visible());
+	if(w.ui != null) {
+	    int id = w.ui.widgetid(w);
+	    buf.append(" ui-id=").append((id < 0) ? "client-only" : Integer.toString(id));
+	}
+	if(mouse != null) {
+	    Coord ml = w.rootxlate(mouse);
+	    boolean inrect = ml.isect(Coord.z, w.sz);
+	    boolean hit = false;
+	    if(inrect) {
+		try {
+		    hit = w.checkhit(ml);
+		} catch(Exception e) {
+		    buf.append(" checkhit-error=").append(e.getClass().getSimpleName());
+		}
+	    }
+	    buf.append(" mouse-local=").append(ml).append(" inrect=").append(inrect).append(" hit=").append(hit);
+	}
+	appendWidgetExtra(buf, w);
+	buf.append('\n');
+    }
+
+    private static void appendWidgetExtra(StringBuilder buf, Widget w) {
+	if(w instanceof Window)
+	    buf.append(" caption=").append(((Window)w).caption());
+	if(w instanceof Label)
+	    buf.append(" text=").append(((Label)w).gettext());
+	if(w instanceof Button) {
+	    Button b = (Button)w;
+	    if((b.text != null) && (b.text.text != null))
+		buf.append(" text=").append(b.text.text);
+	}
+	if(w instanceof Polity) {
+	    Polity p = (Polity)w;
+	    buf.append(" polity=").append(p.cap).append("/").append(p.name).append(" members=").append(p.memb.size());
+	    if(p.mw != null)
+		buf.append(" mw=").append(p.mw.getClass().getName()).append("@").append(p.mw.c).append("/").append(p.mw.sz).append(" visible=").append(p.mw.visible());
+	}
+    }
+
+    private static Coord safeRoot(Widget w) {
+	try {
+	    return(w.rootpos());
+	} catch(Exception e) {
+	    return(null);
+	}
+    }
+
+    private static String parentChain(Widget w) {
+	StringBuilder buf = new StringBuilder();
+	for(Widget cur = w; cur != null; cur = cur.parent) {
+	    if(buf.length() > 0)
+		buf.append(" <- ");
+	    buf.append(cur.getClass().getName());
+	}
+	return(buf.toString());
+    }
+
     public void chdeco(Deco deco) {
 	Coord psz, poff;
 	if(this.deco != null) {
@@ -257,6 +521,7 @@ public class Window extends Widget {
 								   UI.rscale(0.75), UI.rscale(1.0), Color.BLACK);
 	public final boolean lg;
 	public final IButton cbtn;
+	public final IButton dbtn;
 	public boolean dragsize, cfocus;
 	public Area aa, ca;
 	public Coord cptl = Coord.z, cpsz = Coord.z;
@@ -266,6 +531,8 @@ public class Window extends Widget {
 	public DefaultDeco(boolean lg) {
 	    this.lg = lg;
 	    cbtn = add(new IButton(cbtni[0], cbtni[1], cbtni[2])).action(this::tryClose);
+	    dbtn = add(new IButton(dbtni[0], dbtni[1], dbtni[2])).action(this::debugWindow);
+	    dbtn.settip("Debug window");
 	}
 	public DefaultDeco() {this(false);}
 	
@@ -278,6 +545,11 @@ public class Window extends Widget {
 		}
 		wnd.reqclose();
 	    }
+	}
+
+	protected void debugWindow() {
+	    if(parent instanceof Window)
+		((Window)parent).showDebugWindow();
 	}
 
 	public DefaultDeco dragsize(boolean v) {
@@ -294,6 +566,7 @@ public class Window extends Widget {
 	    ca = Area.sized(tlm, csz);
 	    aa = Area.sized(ca.ul.add(mrgn), asz);
 	    cbtn.c = Coord.of(sz.x - cbtn.sz.x, 0);
+	    dbtn.c = cbtn.c.sub(dbtn.sz.x + UI.scale(3), 0);
 	}
 
 	public Area contarea() {
@@ -610,6 +883,8 @@ public class Window extends Widget {
     }
 
     public boolean handle(Event ev) {
+	if(!ev.grabbed && (ev instanceof PointerEvent))
+	    logDebugPointer("before", (PointerEvent)ev);
 	if(!ev.grabbed && (ev instanceof PointerEvent)) {
 	    if(deco != null) {
 		if(checkhit(((PointerEvent)ev).c)) {

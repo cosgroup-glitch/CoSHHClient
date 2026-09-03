@@ -47,6 +47,7 @@ import java.text.AttributedCharacterIterator.Attribute;
 public class ChatUI extends Widget {
     public static final RichText.Foundry fnd = new RichText.Foundry(new ChatParser(TextAttribute.FONT, Text.dfont.deriveFont(UI.scale(12f)), TextAttribute.FOREGROUND, Color.BLACK)).aa(true);
     public static final Text.Foundry qfnd = new Text.Foundry(Text.dfont, 12, new java.awt.Color(192, 255, 192));
+    private static final Text.Foundry edfnd = new Text.Foundry(Text.sansbold, 10).aa(true);
     public static final int selw = UI.scale(130);
     public static final Coord marg = UI.scale(new Coord(9, 9));
     public static final Color[] urgcols = new Color[] {
@@ -59,6 +60,8 @@ public class ChatUI extends Widget {
     public int urgency = 0;
     public final Selector chansel;
     private Coord base = Coord.z;
+    private WidgetCfg cfg;
+    private boolean customPosition = false;
     private QuickLine qline = null;
     private final LinkedList<Notification> notifs = new LinkedList<Notification>();
     private UI.Grab qgrab;
@@ -71,8 +74,27 @@ public class ChatUI extends Widget {
     }
 
     protected void added() {
+	cfg = WidgetCfg.get("ChatUI");
+	customPosition = (cfg != null) && cfg.getValue("custom-position", false);
+	if((cfg != null) && (cfg.sz != null))
+	    super.resize(cfg.sz);
+	if((cfg != null) && (cfg.c != null))
+	    this.c = cfg.c;
 	base = this.c;
 	resize(this.sz);
+    }
+
+    public boolean hasCustomPosition() {
+	return(customPosition);
+    }
+
+    private void storeCfg() {
+	if(cfg == null)
+	    cfg = new WidgetCfg();
+	cfg.c = c;
+	cfg.sz = sz;
+	cfg.setValue("custom-position", customPosition);
+	WidgetCfg.set("ChatUI", cfg);
     }
 
     public static class ChatAttribute extends Attribute {
@@ -1553,16 +1575,46 @@ public class ChatUI extends Widget {
     private static final Tex bmf = Resource.loadtex("gfx/hud/chat-mid");
     private static final Tex bcbd = Resource.loadtex("gfx/hud/chat-close-g");
     public void draw(GOut g) {
-	g.rimage(Window.bg, marg, sz.sub(marg.x * 2, marg.y));
+	g.chcolor(ToolBelt.BG_COLOR);
+	g.frect(Coord.z, sz);
+	g.chcolor(12, 16, 10, 190);
+	g.frect(marg.div(2), sz.sub(marg));
+	g.chcolor(156, 180, 158, 220);
+	g.line(Coord.z, Coord.of(sz.x - 1, 0), 1);
+	g.line(Coord.z, Coord.of(0, sz.y - 1), 1);
+	g.line(Coord.of(sz.x - 1, 0), sz.sub(1, 1), 1);
+	g.line(Coord.of(0, sz.y - 1), sz.sub(1, 1), 1);
+	g.chcolor();
 	super.draw(g);
-	g.image(bulc, new Coord(0, 0));
-	g.image(burc, new Coord(sz.x - burc.sz().x, 0));
-	g.rimagev(bvlb, new Coord(0, bulc.sz().y), sz.y - bulc.sz().y);
-	g.rimagev(bvrb, new Coord(sz.x - bvrb.sz().x, burc.sz().y), sz.y - burc.sz().y);
-	g.rimageh(bhb, new Coord(bulc.sz().x, 0), sz.x - bulc.sz().x - burc.sz().x);
-	g.aimage(bmf, new Coord(sz.x / 2, 0), 0.5, 0);
-	if((sel == null) || (sel.cb == null))
-	    g.aimage(bcbd, new Coord(sz.x, 0), 1, 0);
+	if(!CFG.GUI_LOCK.get()) {
+	    Coord mh = moveHandleCoord();
+	    Coord ms = moveHandleSize();
+	    g.chcolor(DraggableWidget.EDIT_LINE);
+	    g.line(Coord.z, Coord.of(sz.x - 1, 0), 1);
+	    g.line(Coord.z, Coord.of(0, sz.y - 1), 1);
+	    g.line(Coord.of(sz.x - 1, 0), sz.sub(1, 1), 1);
+	    g.line(Coord.of(0, sz.y - 1), sz.sub(1, 1), 1);
+	    g.chcolor(DraggableWidget.EDIT_FILL);
+	    g.frect(mh, ms);
+	    g.chcolor(DraggableWidget.EDIT_LINE);
+	    Tex mt = Text.renderstroked(String.format("%dpx by %dpx", sz.x, sz.y), edfnd).tex();
+	    g.aimage(mt, sz.div(2), 0.5, 0.5);
+	    for(ResizeHandle h : ResizeHandle.values()) {
+		g.chcolor(h == resizeHandle ? DraggableWidget.EDIT_ACTIVE : ((h == ResizeHandle.SW) && CFG.GUI_EDIT_GRID.get()) ? DraggableWidget.EDIT_SNAP : DraggableWidget.EDIT_FILL);
+		g.frect(resizeHandleCoord(h), rsz);
+	    }
+	    g.chcolor(DraggableWidget.EDIT_PRECISION);
+	    for(ResizeHandle h : ResizeHandle.values()) {
+		if(h.side())
+		    g.frect(precisionHandleCoord(h), rsz);
+	    }
+	    if((mm != null) || (rdm != null)) {
+		g.chcolor(DraggableWidget.EDIT_LINE);
+		Tex t = Text.renderstroked(String.format("%dx%d", sz.x, sz.y), Text.std).tex();
+		g.aimage(t, Coord.of(sz.x / 2, Math.max(t.sz().y / 2, -UI.scale(2))), 0.5, 1.0);
+	    }
+	    g.chcolor();
+	}
     }
 
     private static final Resource notifsfx = Resource.local().loadwait("sfx/hud/chat");
@@ -1594,7 +1646,7 @@ public class ChatUI extends Widget {
 
     public void resize(Coord sz) {
 	super.resize(sz);
-	if(visible)
+	if(visible && !customPosition)
 	    this.c = base.add(0, -this.sz.y);
 	chansel.resize(new Coord(selw, this.sz.y - marg.y));
 	if(sel != null)
@@ -1609,13 +1661,22 @@ public class ChatUI extends Widget {
     public boolean targetshow = false;
     public void sshow(boolean show) {
 	clearanims(Spring.class);
-	new Spring(show ? -sz.y : 0);
+	if(customPosition) {
+	    if(show)
+		show();
+	    else
+		hide();
+	} else {
+	    new Spring(show ? -sz.y : 0);
+	}
 	targetshow = show;
     }
 
     public void hresize(int h) {
 	clearanims(Spring.class);
 	resize(sz.x, h);
+	if(customPosition)
+	    storeCfg();
     }
 
     public void resize(int w) {
@@ -1623,7 +1684,9 @@ public class ChatUI extends Widget {
     }
 
     public void move(Coord base) {
-	this.c = (this.base = base).add(0, visible ? -sz.y : 0);
+	this.base = base;
+	if(!customPosition)
+	    this.c = base.add(0, visible ? -sz.y : 0);
     }
 
     public void expand() {
@@ -1673,15 +1736,96 @@ public class ChatUI extends Widget {
 	}
     }
 
-    private UI.Grab dm = null;
-    private Coord doff;
+    private UI.Grab mm = null;
+    private UI.Grab rdm = null;
+    private Coord moff;
+    private Coord rdoff, rdsz, rdc, rdpos;
+    private ResizeHandle resizeHandle = null;
     private static final int minh = 111;
+    private static final Coord rsz = UI.scale(10, 10);
+    private static final int minw = 260;
+
+    private Coord moveHandleSize() {
+	return Coord.of(Math.max(UI.scale(18), (int)Math.round(sz.x * 0.60)),
+			Math.max(UI.scale(14), (int)Math.round(sz.y * 0.60)));
+    }
+
+    private Coord moveHandleCoord() {
+	return sz.sub(moveHandleSize()).div(2);
+    }
+
+    private Coord resizeHandleCoord(ResizeHandle h) {
+	switch(h) {
+	case N: return Coord.of((sz.x - rsz.x) / 2, 0);
+	case S: return Coord.of((sz.x - rsz.x) / 2, sz.y - rsz.y);
+	case W: return Coord.of(0, (sz.y - rsz.y) / 2);
+	case E: return Coord.of(sz.x - rsz.x, (sz.y - rsz.y) / 2);
+	case NW: return Coord.z;
+	case NE: return Coord.of(sz.x - rsz.x, 0);
+	case SW: return Coord.of(0, sz.y - rsz.y);
+	case SE: return sz.sub(rsz);
+	default: return Coord.z;
+	}
+    }
+
+    private Coord precisionHandleCoord(ResizeHandle h) {
+	Coord gap = UI.scale(2, 2);
+	Coord hc = resizeHandleCoord(h);
+	switch(h) {
+	case N:
+	case S:
+	    return Coord.of(Math.min(sz.x - rsz.x, hc.x + rsz.x + gap.x), hc.y);
+	case W:
+	case E:
+	    return Coord.of(hc.x, Math.min(sz.y - rsz.y, hc.y + rsz.y + gap.y));
+	default:
+	    return hc;
+	}
+    }
+
+    private ResizeHandle hitResizeHandle(Coord c) {
+	if(CFG.GUI_LOCK.get())
+	    return null;
+	for(ResizeHandle h : ResizeHandle.values()) {
+	    if(c.isect(resizeHandleCoord(h), rsz))
+		return h;
+	}
+	return null;
+    }
+
+    private ResizeHandle hitPrecisionHandle(Coord c) {
+	if(CFG.GUI_LOCK.get())
+	    return null;
+	for(ResizeHandle h : ResizeHandle.values()) {
+	    if(h.side() && c.isect(precisionHandleCoord(h), rsz))
+		return h;
+	}
+	return null;
+    }
+
     public boolean mousedown(MouseDownEvent ev) {
-	int bmfx = (sz.x - bmf.sz().x) / 2;
 	Coord c= ev.c;
-	if((ev.b == 1) && (c.y < bmf.sz().y) && (c.x >= bmfx) && (c.x <= (bmfx + bmf.sz().x))) {
-	    dm = ui.grabmouse(this);
-	    doff = c;
+	ResizeHandle precision = hitPrecisionHandle(c);
+	if((ev.b == 1) && (precision != null)) {
+	    resizeHandle = precision;
+	    showSizePrompt(precision);
+	    customPosition = true;
+	    return(true);
+	}
+	ResizeHandle h = hitResizeHandle(c);
+	if((ev.b == 1) && (h != null)) {
+	    rdoff = c;
+	    rdsz = sz;
+	    rdc = this.c;
+	    rdpos = this.c.add(c);
+	    resizeHandle = h;
+	    rdm = ui.grabmouse(this);
+	    customPosition = true;
+	    return(true);
+	} else if((ev.b == 1) && !CFG.GUI_LOCK.get() && c.isect(moveHandleCoord(), moveHandleSize())) {
+	    mm = ui.grabmouse(this);
+	    moff = c;
+	    customPosition = true;
 	    return(true);
 	} else {
 	    return(super.mousedown(ev));
@@ -1690,18 +1834,138 @@ public class ChatUI extends Widget {
 
     public void mousemove(MouseMoveEvent ev) {
 	super.mousemove(ev);
-	if(dm != null)
-	    resize(sz.x, Math.max(UI.scale(minh), Math.min(parent.sz.y - UI.scale(100), sz.y + doff.y - ev.c.y)));
+	if(mm != null)
+	    this.c = DraggableWidget.snapBottomLeft(this.c.add(ev.c.sub(moff)), sz);
+	if(rdm != null) {
+	    Coord d = this.c.add(ev.c).sub(rdpos);
+	    int w = rdsz.x, h = rdsz.y;
+	    int x = rdc.x, y = rdc.y;
+	    if(resizeHandle.east)
+		w += d.x;
+	    if(resizeHandle.west) {
+		w -= d.x;
+		x += d.x;
+	    }
+	    if(resizeHandle.south)
+		h += d.y;
+	    if(resizeHandle.north) {
+		h -= d.y;
+		y += d.y;
+	    }
+	    int mw = UI.scale(minw);
+	    int mh = UI.scale(minh);
+	    if(w < mw) {
+		if(resizeHandle.west)
+		    x -= mw - w;
+		w = mw;
+	    }
+	    if(h < mh) {
+		if(resizeHandle.north)
+		    y -= mh - h;
+		h = mh;
+	    }
+	    if(CFG.GUI_EDIT_GRID.get()) {
+		w = DraggableWidget.snap(w);
+		h = DraggableWidget.snap(h);
+		x = DraggableWidget.snap(x);
+		y = DraggableWidget.snap(y);
+	    }
+	    if(resizeHandle.west || resizeHandle.north)
+		this.c = Coord.of(x, y);
+	    resize(w, h);
+	}
     }
 
     public boolean mouseup(MouseUpEvent ev) {
-	if(dm != null) {
-	    dm.remove();
-	    dm = null;
-	    Utils.setprefi("chatsize", UI.unscale(sz.y));
+	if(mm != null) {
+	    mm.remove();
+	    mm = null;
+	    storeCfg();
+	    return(true);
+	} else if(rdm != null) {
+	    rdm.remove();
+	    rdm = null;
+	    resizeHandle = null;
+	    storeCfg();
 	    return(true);
 	} else {
 	    return(super.mouseup(ev));
+	}
+    }
+
+    private enum ResizeHandle {
+	N(false, true, false, false),
+	S(false, false, false, true),
+	W(true, false, false, false),
+	E(false, false, true, false),
+	NW(true, true, false, false),
+	NE(false, true, true, false),
+	SW(true, false, false, true),
+	SE(false, false, true, true);
+
+	final boolean west, north, east, south;
+	ResizeHandle(boolean west, boolean north, boolean east, boolean south) {
+	    this.west = west;
+	    this.north = north;
+	    this.east = east;
+	    this.south = south;
+	}
+
+	boolean side() {
+	    int n = 0;
+	    if(west) n++;
+	    if(north) n++;
+	    if(east) n++;
+	    if(south) n++;
+	    return n == 1;
+	}
+    }
+
+    private void showSizePrompt(ResizeHandle handle) {
+	ChatSizePrompt wnd = new ChatSizePrompt(handle);
+	ui.gui.add(wnd, this.rootpos().add(UI.scale(14, 14)));
+	wnd.raise();
+    }
+
+    private void applySize(ResizeHandle handle, String text) {
+	try {
+	    int v = Integer.parseInt(text.trim());
+	    if(handle.north || handle.south)
+		resize(sz.x, Math.max(UI.scale(minh), v));
+	    else
+		resize(Math.max(UI.scale(minw), v), sz.y);
+	    storeCfg();
+	} catch(NumberFormatException ignored) {
+	}
+	resizeHandle = null;
+    }
+
+    private class ChatSizePrompt extends Window {
+	private final ResizeHandle handle;
+	private final TextEntry entry;
+
+	ChatSizePrompt(ResizeHandle handle) {
+	    super(UI.scale(220, 58), "Chat size");
+	    this.handle = handle;
+	    justclose = true;
+	    adda(new Label(handle.north || handle.south ? "Height px:" : "Width px:"), UI.scale(8, 10), 0, 0);
+	    entry = add(new TextEntry(UI.scale(92), handle.north || handle.south ? Integer.toString(sz.y) : Integer.toString(sz.x)) {
+		public void activate(String text) {
+		    apply();
+		}
+	    }, UI.scale(84, 4));
+	    entry.canactivate = true;
+	    add(new Button(UI.scale(54), "Apply", false, this::apply), UI.scale(84, 31));
+	}
+
+	private void apply() {
+	    applySize(handle, entry.text());
+	    reqdestroy();
+	}
+
+	public void reqdestroy() {
+	    resizeHandle = null;
+	    super.reqdestroy();
 	}
     }
 

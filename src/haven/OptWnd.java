@@ -863,6 +863,7 @@ public class OptWnd extends WindowX {
 	addPanelButton("Map upload", 'm', mapping, colum, row++);
 	addPanelButton("Automation settings", 't', automation, colum, row++);
 	addPanelButton("Experimental", 'x', experimental, colum, row++);
+	main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
 
 	int y = 0;
 	mrow = Math.max(mrow, row);

@@ -522,7 +522,7 @@ public class MappingClient {
 		    return;
 		}
 		log("scheduling upload for %d markers to %s/markerUpdate", loadedMarkers.size(), endpoint);
-		if(!submit(new MarkerUpdate(new JSONArray(loadedMarkers.toArray())))) {
+		if(!submit(new MarkerUpdate(loadedMarkers, 0, loadedMarkers.size()))) {
 		    /* KamiClient: this used to be a println of the rejection and
 		     * nothing else, so a dropped marker upload looked identical
 		     * to a successful one. */
@@ -538,21 +538,51 @@ public class MappingClient {
     }
     
     private class MarkerUpdate implements Runnable {
-	JSONArray data;
+	private final List<JSONObject> markers;
+	private final int from;
+	private final int to;
 	
-	MarkerUpdate(JSONArray data) {
-	    this.data = data;
+	MarkerUpdate(List<JSONObject> markers, int from, int to) {
+	    this.markers = markers;
+	    this.from = from;
+	    this.to = to;
 	}
 	
 	@Override
 	public void run() {
+	    if(dead())
+		return;
+	    uploadRange(from, to);
+	}
+
+	private void uploadRange(int from, int to) {
+	    if(dead() || (from >= to))
+		return;
+
+	    JSONArray data = new JSONArray(markers.subList(from, to).toArray());
+	    if(upload(data))
+		return;
+
+	    if(data.length() == 1) {
+		log("marker %d/%d skipped after upload failure: %s", from + 1, markers.size(), markerdesc(markers.get(from)));
+		return;
+	    }
+
+	    int mid = from + ((to - from) / 2);
+	    log("marker upload chunk %d-%d failed; retrying as %d-%d and %d-%d",
+		from + 1, to, from + 1, mid, mid + 1, to);
+	    uploadRange(from, mid);
+	    uploadRange(mid, to);
+	}
+
+	private boolean upload(JSONArray data) {
 	    String url = endpoint + "/markerUpdate";
 	    long t0 = System.currentTimeMillis();
+	    HttpURLConnection connection = null;
 	    try {
 		final String json = data.toString();
 		log("POST %s (%d markers, %d bytes)", url, data.length(), json.length());
-		HttpURLConnection connection =
-		    (HttpURLConnection) new URL(url).openConnection();
+		connection = (HttpURLConnection) new URL(url).openConnection();
 		connection.setRequestMethod("POST");
 		connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
 		connection.setConnectTimeout(15000);
@@ -571,15 +601,29 @@ public class MappingClient {
 		    warn(String.format("Marker upload rejected: HTTP %d %s after %dms",
 				       code, connection.getResponseMessage(), ms));
 		    log("server said: %s", readbody(connection, true));
+		    return false;
 		} else {
 		    log("marker upload OK: HTTP %d in %dms, %d markers accepted", code, ms, data.length());
+		    return true;
 		}
-		connection.disconnect();
 	    } catch (Exception ex) {
 		warn(String.format("Marker upload failed after %dms: %s",
 				   System.currentTimeMillis() - t0, ex));
 		ex.printStackTrace(System.out);
+		return false;
+	    } finally {
+		if(connection != null)
+		    connection.disconnect();
 	    }
+	}
+
+	private String markerdesc(JSONObject marker) {
+	    return String.format("%s '%s' grid=%s x=%s y=%s",
+		marker.optString("type", "?"),
+		marker.optString("name", "?"),
+		marker.optString("gridID", "?"),
+		marker.opt("x"),
+		marker.opt("y"));
 	}
     }
 

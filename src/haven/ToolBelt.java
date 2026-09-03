@@ -17,12 +17,16 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     public static final int[] FKEYS = {KeyEvent.VK_F1, KeyEvent.VK_F2, KeyEvent.VK_F3, KeyEvent.VK_F4,
 	KeyEvent.VK_F5, KeyEvent.VK_F6, KeyEvent.VK_F7, KeyEvent.VK_F8,
 	KeyEvent.VK_F9, KeyEvent.VK_F10, KeyEvent.VK_F11, KeyEvent.VK_F12};
+    public static final int[] NKEYS = {KeyEvent.VK_1, KeyEvent.VK_2, KeyEvent.VK_3, KeyEvent.VK_4, KeyEvent.VK_5,
+	KeyEvent.VK_6, KeyEvent.VK_7, KeyEvent.VK_8, KeyEvent.VK_9, KeyEvent.VK_0};
     private final int[] beltkeys;
     private final int group;
     private final int start;
     private final int size;
+    private final boolean pageable;
     private final ToggleButton btnLock;
     private final IButton btnFlip;
+    public int curbelt = 0;
     private boolean vertical = false, over = false, locked = false;
     final Tex[] keys;
     private GameUI.BeltSlot last = null;
@@ -37,11 +41,16 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     }
     
     public ToolBelt(String name, int start, int group, int size, int[] beltkeys) {
+	this(name, start, group, size, beltkeys, false);
+    }
+
+    public ToolBelt(String name, int start, int group, int size, int[] beltkeys, boolean pageable) {
 	super(name);
 	this.start = start;
 	this.group = group;
 	this.beltkeys = beltkeys;
 	this.size = size;
+	this.pageable = pageable;
 	keys = new Tex[size];
 	if(beltkeys != null) {
 	    for (int i = 0; i < size; i++) {
@@ -144,7 +153,7 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     @Override
     public void draw(GOut g) {
 	if(over) {
-	    if(!locked) {
+	    if(!locked && guiEditMode()) {
 		g.chcolor(BG_COLOR);
 		g.frect(Coord.z, sz);
 		g.chcolor();
@@ -165,17 +174,23 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
 		g.aimage(keys[i], c.add(INVSZ.sub(2, 0)), 1, 1);
 	    }
 	}
+	drawEditOverlay(g);
     }
     
-    private int slot(int i) {return i + start;}
+    private int slot(int i) {return i + start + (pageable ? (curbelt * 12) : 0);}
     
     @Override
     public boolean globtype(GlobKeyEvent ev) {
 	//do we need to skip if CTRL (and only it) is held, like we do for normal tool belt?
 	if(!visible || beltkeys == null) { return false;}
+	if(ev.mods == KeyMatch.C) {return super.globtype(ev);}
 	for (int i = 0; i < beltkeys.length; i++) {
 	    if(ev.code == beltkeys[i]) {
-		keyact(slot(i));
+		if(pageable && ((ev.mods & KeyMatch.M) != 0)) {
+		    curbelt = i;
+		} else {
+		    keyact(slot(i));
+		}
 		return true;
 	    }
 	}
@@ -200,6 +215,8 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     
     @Override
     public boolean mousedown(MouseDownEvent ev) {
+	if(guiEditMode() && hitmove(ev.c))
+	    return super.mousedown(ev);
 	//TODO: Make actions draggable if not locked
 	int slot = beltslot(ev.c);
 	if(slot != -1) {

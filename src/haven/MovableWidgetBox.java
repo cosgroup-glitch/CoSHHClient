@@ -36,20 +36,12 @@ public class MovableWidgetBox extends ResizableDraggableWidget {
 	    speedButtons = null;
 	}
 	resize(frame.sz);
-	disposables.add(CFG.LOCK_FLOATING_STAT_WDGS.observe(this::updateState));
-	updateState(null);
     }
 
     private static Coord minsz(Widget child) {
 	if(child instanceof Speedget)
 	    return SpeedLayout.displaysz().add(Window.wbox.bisz());
 	return child.sz.add(Window.wbox.bisz()).max(UI.scale(32, 24));
-    }
-
-    private void updateState(CFG<Boolean> cfg) {
-	boolean unlocked = !CFG.LOCK_FLOATING_STAT_WDGS.get();
-	draggable(unlocked);
-	resizable(unlocked);
     }
 
     private void placeSpeedButtons() {

@@ -71,6 +71,9 @@ public class CFG<T> {
     public static final CFG<Theme> THEME = new CFG<>("ui.theme", Theme.Pretty);
     public static final CFG<Boolean> DISABLE_UI_HIDING = new CFG<>("ui.disable_ui_hide", true);
     public static final CFG<Boolean> UI_DISABLE_CONTAINER_POS = new CFG<>("ui.disable_container_pos", false);
+    public static final CFG<Boolean> GUI_LOCK = new CFG<>("ui.gui_lock", true);
+    public static final CFG<Boolean> GUI_EDIT_GRID = new CFG<>("ui.gui_edit_grid", false);
+    public static final CFG<Integer> GUI_EDIT_GRID_SIZE = new CFG<>("ui.gui_edit_grid_size", 25);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_HAND = new CFG<>("ui.eq_proxy.hands", true);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_POUCH = new CFG<>("ui.eq_proxy.pouch", false);
     public static final CFG<Boolean> ALT_COMBAT_UI = new CFG<>("ui.combat.alt_ui", true);
@@ -92,6 +95,7 @@ public class CFG<T> {
     public static final CFG<Boolean> CLEAR_PLAYER_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_player_damage_after", true);
     public static final CFG<Boolean> CLEAR_ALL_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_all_damage_after", false);
     public static final CFG<Boolean> SHOW_COMBAT_KEYS = new CFG<>("ui.combat.show_keys", true);
+    public static final CFG<Boolean> DISABLE_MENU_KEYS_IN_COMBAT = new CFG<>("ui.combat.disable_menu_keys", false);
     public static final CFG<Boolean> COMBAT_AUTO_PEACE = new CFG<>("ui.combat.peace", false);
     public static final CFG<Boolean> COMBAT_RE_AGGRO = new CFG<>("ui.combat.reaggro", false);
     public static final CFG<Boolean> SHOW_CHAT_TIMESTAMP = new CFG<>("ui.chat.timestamp", true);
