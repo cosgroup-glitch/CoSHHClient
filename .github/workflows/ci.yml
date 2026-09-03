@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  build:
+    name: Build client
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Ant
+        run: sudo apt-get update && sudo apt-get install -y ant
+
+      - name: Build client
+        run: ant -noinput bin
+
+      - name: Run unit tests if configured
+        run: |
+          if ant -projecthelp -verbose | grep -qE '^[[:space:]]+test[[:space:]]'; then
+            ant -noinput test
+          else
+            echo "No Ant test target is configured yet."
+          fi
