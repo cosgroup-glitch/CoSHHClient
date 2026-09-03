@@ -12,3 +12,19 @@ out
 /.idea/misc.xml
 /MERGE-NOTES.md
 *.class
+
+# Local secrets and machine-specific state
+.env
+.env.*
+!.env.example
+*.env
+*.log
+*.pem
+*.p12
+*.jks
+*.keystore
+/secrets/
+/private/
+/accounts.json
+/windows.json
+/keybindings.json
