@@ -65,7 +65,7 @@ public class ClientUpdater {
 
     public static void install(UpdateInfo update) throws IOException {
 	Path tmp = Files.createTempDirectory("kami-update-");
-	Path zip = tmp.resolve("KamiClient-" + sanitize(update.version) + ".zip");
+	Path zip = tmp.resolve("KamisLabyrinthClient-" + sanitize(update.version) + ".zip");
 	download(update.url.toURL(), zip);
 	if((update.sha256 != null) && !update.sha256.equalsIgnoreCase(sha256(zip)))
 	    throw(new IOException("Downloaded update failed checksum verification."));
@@ -88,11 +88,17 @@ public class ClientUpdater {
 	new HackThread(() -> {
 	    try {
 		UpdateInfo update = check();
-		if(update.newer())
-		    gui.msg("Kami Client update " + update.version + " is available. Open Options to update.", GameUI.MsgType.INFO);
-	    } catch(Exception ignored) {
+		if(!update.newer())
+		    return;
+		if(gui != null)
+		    gui.msg("Downloading kami's labyrinth Client update " + update.version + ". The client will restart.", GameUI.MsgType.INFO);
+		install(update);
+	    } catch(Exception e) {
+		if(gui != null)
+		    gui.msg("Update failed: " + e.getMessage(), GameUI.MsgType.ERROR);
+		e.printStackTrace(Debug.log);
 	    }
-	}, "Kami Client update check").start();
+	}, "kami's labyrinth Client update check").start();
     }
 
     private static Path appdir() throws IOException {

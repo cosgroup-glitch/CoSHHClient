@@ -36,6 +36,10 @@ public class DraggableWidget extends Widget {
 
     public static boolean guiEditMode() {return !CFG.GUI_LOCK.get();}
 
+    protected boolean initialContentsVisible() {
+	return true;
+    }
+
     protected boolean canEditMove() {
 	return draggable && guiEditMode();
     }
@@ -205,7 +209,7 @@ public class DraggableWidget extends Widget {
     protected void initCfg() {
 	cfg = WidgetCfg.get(name);
 	customPosition = (cfg != null) && cfg.getValue("custom-position", false);
-	contentsVisible = (cfg == null) || cfg.getValue("contents-visible", true);
+	contentsVisible = (cfg == null) ? initialContentsVisible() : cfg.getValue("contents-visible", initialContentsVisible());
 	if(cfg != null) {
 	    c = cfg.c == null ? c : cfg.c;
 	    sz = cfg.sz == null ? sz : cfg.sz;

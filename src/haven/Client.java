@@ -36,7 +36,7 @@ import haven.iosys.audio.*;
 import java.awt.image.BufferedImage;
 
 public class Client implements Console.Directory {
-    private static final String TITLE = String.format("Haven & Hearth modified by Kami (v%s)", Config.version);
+    private static final String TITLE = String.format("kami's labyrinth Client (v%s)", Config.version);
     public static final Config.Variable<Boolean> initfullscreen = Config.Variable.propb("haven.fullscreen", false);
     public final Toolkit tk;
     public final Windeye wnd;

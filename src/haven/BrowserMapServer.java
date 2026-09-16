@@ -64,12 +64,12 @@ public class BrowserMapServer {
 
     private static void page(HttpExchange ex) throws IOException {
 	byte[] data = ("<!doctype html><html><head><meta charset=\"utf-8\">" +
-		      "<title>Kami Map</title><style>" +
+		      "<title>kami's labyrinth Map</title><style>" +
 		      "html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#ddd;font:13px sans-serif}" +
 		      "canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated;cursor:grab}" +
 		      "canvas.drag{cursor:grabbing}.hud{position:fixed;left:10px;top:10px;background:rgba(0,0,0,.55);padding:7px 9px;border:1px solid rgba(255,255,255,.15)}" +
 		      "button{margin-left:6px;background:#263845;color:#eee;border:1px solid #587184;padding:3px 7px}button.on{background:#3f6178;color:white}" +
-		      "</style></head><body><canvas id=\"map\"></canvas><div class=\"hud\">Kami Map <button id=\"follow\">Follow</button><button data-toggle=\"markers\">Markers</button><button data-toggle=\"labels\">Names</button><button data-toggle=\"icons\">Icons</button><button data-toggle=\"party\">Party</button><button data-toggle=\"grid\">Grid</button><button data-toggle=\"view\">View</button><button data-toggle=\"claims\">Claims</button><button data-toggle=\"village\">Village</button><button data-toggle=\"realm\">Realm</button></div><script>" +
+		      "</style></head><body><canvas id=\"map\"></canvas><div class=\"hud\">kami's labyrinth Map <button id=\"follow\">Follow</button><button data-toggle=\"markers\">Markers</button><button data-toggle=\"labels\">Names</button><button data-toggle=\"icons\">Icons</button><button data-toggle=\"party\">Party</button><button data-toggle=\"grid\">Grid</button><button data-toggle=\"view\">View</button><button data-toggle=\"claims\">Claims</button><button data-toggle=\"village\">Village</button><button data-toggle=\"realm\">Realm</button></div><script>" +
 		      "const cv=document.getElementById('map'),ctx=cv.getContext('2d'),btn=document.getElementById('follow');" +
 		      "let st=null,center={x:0,y:0},ppu=2,follow=true,drag=null,cache=new Map();" +
 		      "let layers={markers:true,labels:true,icons:true,party:true,grid:false,view:false,claims:false,village:false,realm:false};" +

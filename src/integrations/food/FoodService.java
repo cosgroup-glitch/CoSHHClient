@@ -35,7 +35,7 @@ public class FoodService {
     public static final String API_ENDPOINT = CFG.AUTOMAP_ENDPOINT.get();
     private static final String FOOD_DATA_URL = "/data/food-info.json";
     private static final File FOOD_DATA_CACHE_FILE = new File("food_data.json");
-    private static String token = "KamiClient";
+    private static String token = "KamisLabyrinthClient";
     
     private static final Map<String, ParsedFoodInfo> cachedItems = new ConcurrentHashMap<>();
     private static final Queue<HashedFoodInfo> sendQueue = new ConcurrentLinkedQueue<>();

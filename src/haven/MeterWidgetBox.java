@@ -46,6 +46,33 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 	return name.equals("hp") || name.equals("stam") || name.equals("nrj");
     }
 
+    private boolean isStatMeter() {
+	return isKnownMeter(metername());
+    }
+
+    private boolean cfgVisible() {
+	if(!isStatMeter())
+	    return true;
+	if(!CFG.SHOW_FLOATING_STAT_WDGS.get())
+	    return false;
+	return !CFG.SHOW_FLOATING_STATS_COMBAT.get() || ((ui != null) && (ui.gui != null) && ui.gui.isInCombat());
+    }
+
+    @Override
+    protected boolean initialContentsVisible() {
+	return !isStatMeter() || CFG.SHOW_FLOATING_STAT_WDGS.get();
+    }
+
+    @Override
+    protected boolean canEditMove() {
+	return !CFG.LOCK_FLOATING_STAT_WDGS.get() && super.canEditMove();
+    }
+
+    @Override
+    protected boolean canEditResize() {
+	return !CFG.LOCK_FLOATING_STAT_WDGS.get() && super.canEditResize();
+    }
+
     @Override
     public void resize(Coord sz) {
 	super.resize(sz);
@@ -55,7 +82,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 
     @Override
     public boolean checkhit(Coord c) {
-	return draggable() && c.isect(Coord.z, sz);
+	return cfgVisible() && draggable() && c.isect(Coord.z, sz);
     }
 
     @Override
@@ -68,7 +95,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 
     @Override
     public void draw(GOut g) {
-	if(contentsVisible())
+	if(cfgVisible() && contentsVisible())
 	    drawmeter(g);
 	drawEditOverlay(g);
 	drawresize(g);

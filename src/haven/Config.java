@@ -47,7 +47,7 @@ public class Config {
     public static final String LINE_SEPARATOR = System.lineSeparator();
     public static final Properties jarprops = getjarprops();
     public static final File HOMEDIR = getHomeDir();
-    public static final String confid = get().getprop("config.client-id", "KamiClient");
+    public static final String confid = get().getprop("config.client-id", "KamisLabyrinthClient");
     public static final Variable<Boolean> par = Variable.def(() -> true);
     public static final Variable<Boolean> exp = Variable.propb("haven.experimental", false);
     public static final boolean windows = System.getProperty("os.name", "").startsWith("Windows");
@@ -103,12 +103,13 @@ public class Config {
 	    /* KamiClient: upstream yanked the local-dir lookup out of HashDirCache
 	     * and into Config.localdir(), dropping the trailing "data" bit on the
 	     * way. localdir() is exactly what findbase().getParent() gave us
-	     * before, so hashdir mode still lands in ~/.haven/kami-client. It can
-	     * hand back null though, so fall through to the workdir if it does. */
+	     * before. It can hand back null though, so fall through to the workdir
+	     * if it does. */
 	    Path base = localdir();
 	    if(base != null) {
-		File file = new File(base + File.separator + "kami-client");
+		File file = new File(base + File.separator + "kamis-labyrinth-client");
 		file.mkdirs();
+		migrateLegacyHome(new File(base + File.separator + "kami-client"), file);
 		migrateLegacyHome(file);
 		return file.getAbsoluteFile();
 	    }
@@ -119,9 +120,13 @@ public class Config {
 
     private static void migrateLegacyHome(File home) {
 	File legacy = new File("").getAbsoluteFile();
+	migrateLegacyHome(legacy, home);
+    }
+
+    private static void migrateLegacyHome(File legacy, File home) {
 	if(legacy.equals(home))
 	    return;
-	File marker = new File(home, ".workdir-migrated");
+	File marker = new File(home, ".migrated-" + legacy.getName().replaceAll("[^A-Za-z0-9_.-]", "_"));
 	if(marker.exists())
 	    return;
 	File[] files = legacy.listFiles();

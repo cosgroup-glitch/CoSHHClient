@@ -276,19 +276,19 @@
 
   <target name="dist" depends="bin">
     <mkdir dir="dist" />
-    <zip destfile="dist/KamiClient.zip">
+    <zip destfile="dist/KamisLabyrinthClient.zip">
       <fileset dir="." includes="run-kami-bin.bat" />
       <zipfileset dir="bin" prefix="bin">
 	<include name="*.jar" />
 	<include name="haven-config.properties" />
       </zipfileset>
     </zip>
-    <checksum file="dist/KamiClient.zip" property="dist.sha256" algorithm="SHA-256" />
+    <checksum file="dist/KamisLabyrinthClient.zip" property="dist.sha256" algorithm="SHA-256" />
     <echo file="dist/update.json">{
   "version": "${version}",
-  "url": "KamiClient.zip",
+  "url": "KamisLabyrinthClient.zip",
   "sha256": "${dist.sha256}",
-  "notes": "Kami Client update"
+  "notes": "kami's labyrinth Client update"
 }</echo>
   </target>
 

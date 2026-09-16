@@ -94,8 +94,8 @@ public class CFG<T> {
     public static final CFG<Boolean> SHOW_ATTACK_RANGE_ENEMY = new CFG<>("ui.combat.show_attack_range_enemy", false);
     public static final CFG<Boolean> SHOW_COMBAT_INFO = new CFG<>("ui.combat.show_info", false);
     public static final CFG<Integer> SHOW_COMBAT_INFO_HEIGHT = new CFG<>("ui.combat.show_info_height", 1);
-    public static final CFG<Boolean> SHOW_FLOATING_STAT_WDGS = new CFG<>("ui.combat.show_floating_stat_wdgs", false);
-    public static final CFG<Boolean> SHOW_FLOATING_STATS_COMBAT = new CFG<>("ui.combat.show_floating_stat_wdgs_combat", true);
+    public static final CFG<Boolean> SHOW_FLOATING_STAT_WDGS = new CFG<>("ui.combat.show_floating_stat_wdgs", true);
+    public static final CFG<Boolean> SHOW_FLOATING_STATS_COMBAT = new CFG<>("ui.combat.show_floating_stat_wdgs_combat", false);
     public static final CFG<Boolean> LOCK_FLOATING_STAT_WDGS = new CFG<>("ui.combat.lock_floating_stat_wdgs", false);
     public static final CFG<Boolean> DRAG_COMBAT_UI = new CFG<>("ui.combat.drag_combat_ui", false);
     public static final CFG<Boolean> KEEP_COMBAT_UI_AFTER_COMBAT = new CFG<>("ui.combat.keep_after_combat", true);

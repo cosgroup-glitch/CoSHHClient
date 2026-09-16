@@ -37,7 +37,7 @@ outputs from the build process:
    no further configuration (as with `java -jar bin/hafen.jar') and
    should work just like downloading the client from the main site.
 
-For this Kami Client workspace, use `run-kami-bin.bat' from the source
+For this kami's labyrinth Client workspace, use `run-kami-bin.bat' from the source
 tree root. It launches the supported `bin/hafen.jar' layout directly;
 older packaged `dist' launchers are redundant for local use.
 Use `build-kami-bin.bat' to rebuild that runnable `bin' layout on Windows.

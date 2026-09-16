@@ -891,11 +891,10 @@ public class OptWnd extends WindowX {
 	mrow = Math.max(mrow, row);
 	row = 0;
 
-	    addPanelButton("Map upload", 'm', mapping, colum, row++);
-	    addPanelButton("Automation settings", 't', automation, colum, row++);
-	    addPanelButton("Experimental", 'x', experimental, colum, row++);
-	    main.add(new Button(UI.scale(200), "Check for updates", false).action(this::checkForUpdates), UI.scale(PANEL_POS.mul(colum, row++)));
-	    main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
+	addPanelButton("Map upload", 'm', mapping, colum, row++);
+	addPanelButton("Automation settings", 't', automation, colum, row++);
+	addPanelButton("Experimental", 'x', experimental, colum, row++);
+	main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
 
 	int y = 0;
 	mrow = Math.max(mrow, row);
@@ -963,33 +962,6 @@ public class OptWnd extends WindowX {
 
     private void addPanelButton(String name, char key, Action action, int x, int y) {
 	main.add(new AButton(UI.scale(200), name, key, action), UI.scale(PANEL_POS.mul(x, y)));
-    }
-
-    private void checkForUpdates() {
-	GameUI gui = getparent(GameUI.class);
-	if(!ClientUpdater.configured()) {
-	    if(gui != null)
-		gui.msg("No update manifest is configured.", GameUI.MsgType.INFO);
-	    return;
-	}
-	Thread th = new HackThread(() -> {
-	    try {
-		ClientUpdater.UpdateInfo update = ClientUpdater.check();
-		if(!update.newer()) {
-		    if(gui != null)
-			gui.msg("Kami Client is up to date.", GameUI.MsgType.GOOD);
-		    return;
-		}
-		if(gui != null)
-		    gui.msg("Downloading Kami Client update " + update.version + ". The client will restart.", GameUI.MsgType.INFO);
-		ClientUpdater.install(update);
-	    } catch(Exception e) {
-		if(gui != null)
-		    gui.msg("Update failed: " + e.getMessage(), GameUI.MsgType.ERROR);
-		e.printStackTrace(Debug.log);
-	    }
-	}, "Kami Client updater");
-	th.start();
     }
 
     private void initCameraPanel() {
