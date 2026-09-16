@@ -49,7 +49,7 @@ public class ClientUpdater {
 	if(manifest == null)
 	    throw(new IOException("No update manifest configured."));
 	String json;
-	try(InputStream in = Http.fetch(manifest.toURL())) {
+	try(InputStream in = fetchExternal(manifest.toURL())) {
 	    json = read(in);
 	}
 	JsonObject obj = gson.fromJson(json, JsonObject.class);
@@ -114,7 +114,7 @@ public class ClientUpdater {
     }
 
     private static void download(URL url, Path dest) throws IOException {
-	URLConnection conn = Http.open(url);
+	URLConnection conn = openExternal(url);
 	try(InputStream in = conn.getInputStream();
 	    OutputStream out = Files.newOutputStream(dest)) {
 	    byte[] buf = new byte[1024 * 128];
@@ -122,6 +122,17 @@ public class ClientUpdater {
 	    while((n = in.read(buf)) >= 0)
 		out.write(buf, 0, n);
 	}
+    }
+
+    private static URLConnection openExternal(URL url) throws IOException {
+	URLConnection conn = url.openConnection();
+	conn.addRequestProperty("User-Agent", Http.USER_AGENT);
+	return(conn);
+    }
+
+    private static InputStream fetchExternal(URL url) throws IOException {
+	URLConnection conn = openExternal(url);
+	return(conn.getInputStream());
     }
 
     private static void writeInstaller(Path script, Path zip, Path appdir, Path log) throws IOException {
