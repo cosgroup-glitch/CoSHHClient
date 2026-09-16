@@ -67,9 +67,10 @@ respective licensing details are as follows:
    Jogg/Jorbis libraries. It was written by me, Fredrik Tolf, and can
    be considered to be in the public domain.
 
- * The file `etc/icon.png' is the icon used for the main client
-   window. You're perfectly free to copy it verbatim or replace it as
-   you wish, but it should be considered our trademark.
+ * The files `etc/icon.png' and `etc/KamisLabyrinthClient.ico' are the
+   icons used for the kami's labyrinth Client window and Windows
+   shortcuts. You're perfectly free to replace them as you wish, but
+   they should be considered project branding.
 
  * The majority of the other files, including the Ant build file
    (`build.xml') and the various small scripts and insignificant data
@@ -82,9 +83,9 @@ respective licensing details are as follows:
    worthy of notice, however, is the `build/hafen.jar' file, which is
    the build script's primary output. It will consist of files
    compiled from the `src' directory, some resources from the `etc'
-   directory (including our amazing trademark icon), and the extracted
-   JCraft files. Thus, excepting our trademark, award-winning icon, it
-   will be LPGL and a little bit public domain. Then, obviously,
+   directory (including the project icon), and the extracted
+   JCraft files. Thus, excepting the project branding icon, it will be
+   LPGL and a little bit public domain. Then, obviously,
    you're basically free to do whatever you like with it as long as
    you make sure to distribute the corresponding source code (and
    remember to honor our acclaimed, trademark icon).

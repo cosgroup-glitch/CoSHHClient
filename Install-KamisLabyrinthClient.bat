@@ -74,7 +74,7 @@ function Get-Sha256($path) {
     return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Create-Shortcut($path, $target, $workingDirectory) {
+function Create-Shortcut($path, $target, $workingDirectory, $iconPath) {
     $parent = Split-Path -Parent $path
     if(!(Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
@@ -84,6 +84,9 @@ function Create-Shortcut($path, $target, $workingDirectory) {
     $shortcut.TargetPath = $target
     $shortcut.WorkingDirectory = $workingDirectory
     $shortcut.Description = $appName
+    if($iconPath -and (Test-Path -LiteralPath $iconPath)) {
+        $shortcut.IconLocation = $iconPath
+    }
     $shortcut.Save()
 }
 
@@ -150,11 +153,12 @@ try {
     }
 
     Step 'Creating shortcuts'
+    $iconPath = Join-Path $installDir 'KamisLabyrinthClient.ico'
     $desktopShortcut = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) "$appName.lnk"
     $startMenuDir = Join-Path ([Environment]::GetFolderPath('Programs')) $appName
     $startMenuShortcut = Join-Path $startMenuDir "$appName.lnk"
-    Create-Shortcut $desktopShortcut $launcher $installDir
-    Create-Shortcut $startMenuShortcut $launcher $installDir
+    Create-Shortcut $desktopShortcut $launcher $installDir $iconPath
+    Create-Shortcut $startMenuShortcut $launcher $installDir $iconPath
 
     Step 'Starting client'
     Start-Process -FilePath $launcher -WorkingDirectory $installDir
