@@ -6,6 +6,45 @@ please refer to its main website at <http://www.havenandhearth.com/>.
 This file exists mainly to describe various technical aspects of the
 source tree.
 
+		    kami's labyrinth Client quick start
+
+The public repository for this client is:
+
+<https://github.com/cosgroup-glitch/CoSHHClient>
+
+To build a local runnable copy on Windows, install a JDK and Apache
+Ant, then run this from the source tree root:
+
+    build-kami-bin.bat
+
+That creates the `bin' directory. Start the client with:
+
+    run-kami-bin.bat
+
+To build the release package manually, run:
+
+    ant "-Dversion=0.1.0" dist
+
+This creates:
+
+ * `dist/KamisLabyrinthClient.zip' - the package users download.
+ * `dist/update.json' - the update manifest used by the client.
+
+The packaged client checks this manifest on startup:
+
+<https://github.com/cosgroup-glitch/CoSHHClient/releases/latest/download/update.json>
+
+For normal public releases, create and push a version tag:
+
+    git tag v0.1.0
+    git push origin v0.1.0
+
+GitHub Actions will build the package and publish a GitHub Release with
+`KamisLabyrinthClient.zip' and `update.json'. Users should download the
+zip from the latest release page, extract it, and run `run-kami-bin.bat'.
+After that, startup update checks will download newer release packages
+when the version in `update.json' changes.
+
 			    Getting a copy
 
 In case you are reading this README outside of a local copy of the
