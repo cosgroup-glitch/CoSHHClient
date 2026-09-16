@@ -38,6 +38,7 @@ out
 /timers.json
 /world-*/
 /.workdir-migrated
+/doc/related-crash-logs/
 
 # Generated local/debug artifacts
 /string.png
