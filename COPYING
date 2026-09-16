@@ -72,6 +72,11 @@ respective licensing details are as follows:
    shortcuts. You're perfectly free to replace them as you wish, but
    they should be considered project branding.
 
+ * The alarm manager code in `src/haven/AlarmManager.java' and
+   `src/haven/AlarmWindow.java', plus the default files in
+   `AlarmSounds', were adapted from Nightdawg's Hurricane client:
+   <https://github.com/Nightdawg/Hurricane>.
+
  * The majority of the other files, including the Ant build file
    (`build.xml') and the various small scripts and insignificant data
    files in the `etc' directory (except `etc/icon.png', as described

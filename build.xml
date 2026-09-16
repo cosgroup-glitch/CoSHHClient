@@ -278,6 +278,7 @@
     <mkdir dir="dist" />
     <zip destfile="dist/KamisLabyrinthClient.zip">
       <fileset dir="." includes="run-kami-bin.bat,KamisLabyrinthClient.bat" />
+      <fileset dir="." includes="AlarmSounds/**" />
       <fileset dir="etc" includes="KamisLabyrinthClient.ico" />
       <zipfileset dir="bin" prefix="bin">
 	<include name="*.jar" />

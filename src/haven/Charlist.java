@@ -97,6 +97,7 @@ public class Charlist extends Widget {
 	    disc = add(new ILabel("", df), name.pos("bl"));
 	    adda(new Button(UI.scale(100), "Play"), pos("cbr").subs(10, 2), 1.0, 1.0).action(() ->
 	    {
+		Gob.alarmPlayed.clear();
 		Charlist.this.wdgmsg("play", chr.name);
 		Config.setPlayerName(chr.name);
 		//Config.initAutomapper(ui);  // This apparently is bullshit

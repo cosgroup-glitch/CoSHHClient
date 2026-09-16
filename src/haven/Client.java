@@ -370,6 +370,7 @@ public class Client implements Console.Directory {
 	haven.error.ErrorHandler.setprop("jar.config", Config.confid);
 	me.ender.LegacyBGM.onGameStart();
 	setupres();
+	AlarmManager.init();
 	Client cl = new Client(Toolkit.instance());
 	try {
 	    UI.Runner main = null;

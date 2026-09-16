@@ -59,6 +59,7 @@ public class OptWnd extends WindowX {
     public static final Text.Foundry LBL_FNT = new Text.Foundry(sans, 14);
     public Panel current;
     private WidgetList<KeyBinder.ShortcutWidget> shortcutList;
+    private AlarmWindow alarmWindow;
 
     public void chpanel(Panel p) {
 	if(current != null)
@@ -894,6 +895,7 @@ public class OptWnd extends WindowX {
 	addPanelButton("Map upload", 'm', mapping, colum, row++);
 	addPanelButton("Automation settings", 't', automation, colum, row++);
 	addPanelButton("Experimental", 'x', experimental, colum, row++);
+	main.add(new Button(UI.scale(200), "Alarms", false).action(this::toggleAlarmWindow), UI.scale(PANEL_POS.mul(colum, row++)));
 	main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
 
 	int y = 0;
@@ -962,6 +964,20 @@ public class OptWnd extends WindowX {
 
     private void addPanelButton(String name, char key, Action action, int x, int y) {
 	main.add(new AButton(UI.scale(200), name, key, action), UI.scale(PANEL_POS.mul(x, y)));
+    }
+
+    private void toggleAlarmWindow() {
+	if(alarmWindow == null || alarmWindow.parent == null) {
+	    GameUI gui = getparent(GameUI.class);
+	    if(gui == null)
+		return;
+	    alarmWindow = gui.add(new AlarmWindow());
+	    alarmWindow.show();
+	} else {
+	    alarmWindow.show(!alarmWindow.visible);
+	}
+	if(alarmWindow.visible)
+	    alarmWindow.raise();
     }
 
     private void initCameraPanel() {

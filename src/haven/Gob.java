@@ -89,6 +89,7 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     private Overlay marker;
     private MarkerSprite.Id markerId;
     private GobSpeedInfo gobSpeedInfo;
+    public static final Set<Long> alarmPlayed = Collections.synchronizedSet(new HashSet<Long>());
     public static final ChangeCallback CHANGED = new ChangeCallback() {
 	@Override
 	public void added(Gob ob) {
@@ -605,6 +606,7 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	    status.update(StatusType.map_marker);
 	}
 	updateState();
+	playAlarm();
 	if (is(GobTag.ME))
 	    botActions();
     }
@@ -1594,6 +1596,16 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	    lastInCombat = System.currentTimeMillis();
 	}
 	updateAnimFreeze(tags);
+    }
+
+    private void playAlarm() {
+	if(id < 0 || alarmPlayed.contains(id))
+	    return;
+	String name = resid();
+	if(name == null)
+	    return;
+	if(AlarmManager.play(name, this))
+	    alarmPlayed.add(id);
     }
 
     private void updateAnimFreeze(Set<GobTag> tags) {
