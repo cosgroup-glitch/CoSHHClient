@@ -23,13 +23,43 @@ function Wait-To-Close {
     Read-Host 'Press Enter to close'
 }
 
-function Test-Java {
-    try {
-        & java -version 2>$null
-        return ($LASTEXITCODE -eq 0)
-    } catch {
-        return $false
+function Resolve-Java {
+    $cmd = Get-Command java -ErrorAction SilentlyContinue
+    if($cmd -and $cmd.Source) {
+        return $cmd.Source
     }
+
+    $candidates = @()
+    if($env:JAVA_HOME) {
+        $candidates += (Join-Path $env:JAVA_HOME 'bin\java.exe')
+    }
+
+    $roots = @(
+        (Join-Path $env:ProgramFiles 'Eclipse Adoptium'),
+        (Join-Path $env:ProgramFiles 'Java'),
+        (Join-Path $env:ProgramFiles 'Microsoft'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Java')
+    )
+
+    foreach($root in $roots) {
+        if($root -and (Test-Path -LiteralPath $root)) {
+            $candidates += Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object { Join-Path $_.FullName 'bin\java.exe' }
+        }
+    }
+
+    $candidates += @(
+        (Join-Path $env:ProgramFiles 'Java\latest\bin\java.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Java\latest\bin\java.exe')
+    )
+
+    foreach($candidate in $candidates) {
+        if($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
 }
 
 function Resolve-DownloadUrl($base, $relativeOrAbsolute) {
@@ -60,14 +90,16 @@ function Create-Shortcut($path, $target, $workingDirectory) {
 try {
     Write-Host "$appName installer" -ForegroundColor Green
 
-    if(!(Test-Java)) {
+    $javaPath = Resolve-Java
+    if(!$javaPath) {
         Write-Host ""
-        Write-Host 'Java was not found on PATH. Install Java 21 or newer, then run this installer again.' -ForegroundColor Yellow
+        Write-Host 'Java was not found. Install Java 21 or newer, then run this installer again.' -ForegroundColor Yellow
         Write-Host "Opening Java download page: $javaUrl"
         Start-Process $javaUrl
         Wait-To-Close
         exit 1
     }
+    Write-Host "Using Java: $javaPath" -ForegroundColor DarkGray
 
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('kami-install-' + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
