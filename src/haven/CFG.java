@@ -34,6 +34,7 @@ public class CFG<T> {
     public static final CFG<Boolean> DISPLAY_GOB_HITBOX_TOP = new CFG<>("display.gob_hitbox_top", false);
     public static final CFG<Boolean> DISPLAY_GOB_PATHS = new CFG<>("display.gob_paths.show", false);
     public static final CFG<Set<PathCategory>> DISPLAY_GOB_PATHS_FOR = new CFG<>("display.gob_paths.categories", PathVisualizer.DEF_CATEGORIES, new TypeToken<Set<PathCategory>>(){});
+    public static final CFG<Boolean> SHOW_WORLD_GRID = new CFG<>("display.world_grid", false);
     public static final CFG<Boolean> QUEUE_PATHS = new CFG<>("general.queue_path", false);
     public static final CFG<Boolean> HIDE_TREES = new CFG<>("display.hide_gobs", false);
     public static final CFG<Boolean> SKIP_HIDING_RADAR_TREES = new CFG<>("display.skip_hide_radar_gobs", false);
@@ -76,6 +77,7 @@ public class CFG<T> {
     public static final CFG<Integer> GUI_EDIT_GRID_SIZE = new CFG<>("ui.gui_edit_grid_size", 25);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_HAND = new CFG<>("ui.eq_proxy.hands", true);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_POUCH = new CFG<>("ui.eq_proxy.pouch", false);
+    public static final CFG<Boolean> SHOW_BUILDER_WINDOW = new CFG<>("ui.builder_window.show", false);
     public static final CFG<Boolean> ALT_COMBAT_UI = new CFG<>("ui.combat.alt_ui", true);
     public static final CFG<Boolean> SIMPLE_COMBAT_OPENINGS = new CFG<>("ui.combat.simple_openings", true);
     public static final CFG<Boolean> ALWAYS_MARK_COMBAT_TARGET = new CFG<>("ui.combat.always_mark_target", false);
@@ -85,21 +87,35 @@ public class CFG<T> {
     public static final CFG<Boolean> MARK_PARTY_IN_COMBAT = new CFG<>("ui.combat.mark_party_in_combat", false);
     public static final CFG<Boolean> MARK_SELF_IN_COMBAT = new CFG<>("ui.combat.mark_self_in_combat", false);
     public static final CFG<Boolean> MARK_ENEMY_IN_COMBAT = new CFG<>("ui.combat.mark_enemies_in_combat", false);
+    public static final CFG<Integer> COMBAT_MARKER_RADIUS = new CFG<>("ui.combat.marker_radius", 4);
+    public static final CFG<Boolean> SHOW_ATTACK_RANGE = new CFG<>("ui.combat.show_attack_range", true);
+    public static final CFG<Boolean> SHOW_ATTACK_RANGE_SELF = new CFG<>("ui.combat.show_attack_range_self", false);
+    public static final CFG<Boolean> SHOW_ATTACK_RANGE_PARTY = new CFG<>("ui.combat.show_attack_range_party", false);
+    public static final CFG<Boolean> SHOW_ATTACK_RANGE_ENEMY = new CFG<>("ui.combat.show_attack_range_enemy", false);
     public static final CFG<Boolean> SHOW_COMBAT_INFO = new CFG<>("ui.combat.show_info", false);
     public static final CFG<Integer> SHOW_COMBAT_INFO_HEIGHT = new CFG<>("ui.combat.show_info_height", 1);
     public static final CFG<Boolean> SHOW_FLOATING_STAT_WDGS = new CFG<>("ui.combat.show_floating_stat_wdgs", false);
     public static final CFG<Boolean> SHOW_FLOATING_STATS_COMBAT = new CFG<>("ui.combat.show_floating_stat_wdgs_combat", true);
     public static final CFG<Boolean> LOCK_FLOATING_STAT_WDGS = new CFG<>("ui.combat.lock_floating_stat_wdgs", false);
     public static final CFG<Boolean> DRAG_COMBAT_UI = new CFG<>("ui.combat.drag_combat_ui", false);
+    public static final CFG<Boolean> KEEP_COMBAT_UI_AFTER_COMBAT = new CFG<>("ui.combat.keep_after_combat", true);
+    public static final CFG<Integer> COMBAT_UI_INACTIVE_SCALE = new CFG<>("ui.combat.inactive_scale", 25);
+    public static final CFG<Integer> COMBAT_UI_OPENING_DECAY = new CFG<>("ui.combat.opening_decay_tenths", 17);
     public static final CFG<Boolean> SHOW_COMBAT_DMG = new CFG<>("ui.combat.show_dmg", true);
     public static final CFG<Boolean> CLEAR_PLAYER_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_player_damage_after", true);
     public static final CFG<Boolean> CLEAR_ALL_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_all_damage_after", false);
+    public static final CFG<CombatReducerMode> AUTO_COMBAT_REDUCER_START = new CFG<>("ui.combat.auto_reducer_start", CombatReducerMode.ON);
+    public static final CFG<Boolean> COMBAT_DEBUG_OPENING_RECOVERY = new CFG<>("ui.combat.debug.opening_recovery", false);
+    public static final CFG<Boolean> GUARDED_COMBAT_SKILLS_ENABLED = new CFG<>("ui.combat.guarded_skills_enabled", true);
+    public static final CFG<Set<String>> GUARDED_COMBAT_SKILLS = new CFG<>("ui.combat.guarded_skills", GuardedCombatSkills.defaultEnabled(), new TypeToken<Set<String>>(){});
+    public static final CFG<Map<String, Integer>> GUARDED_COMBAT_THRESHOLDS = new CFG<>("ui.combat.guarded_skill_thresholds", GuardedCombatSkills.defaultThresholds(), new TypeToken<Map<String, Integer>>(){});
     public static final CFG<Boolean> SHOW_COMBAT_KEYS = new CFG<>("ui.combat.show_keys", true);
     public static final CFG<Boolean> DISABLE_MENU_KEYS_IN_COMBAT = new CFG<>("ui.combat.disable_menu_keys", false);
     public static final CFG<Boolean> COMBAT_AUTO_PEACE = new CFG<>("ui.combat.peace", false);
     public static final CFG<Boolean> COMBAT_RE_AGGRO = new CFG<>("ui.combat.reaggro", false);
     public static final CFG<Boolean> SHOW_CHAT_TIMESTAMP = new CFG<>("ui.chat.timestamp", true);
     public static final CFG<Boolean> STORE_CHAT_LOGS = new CFG<>("ui.chat.logs", false);
+    public static final CFG<Boolean> SHOW_CHAT_POPUPS_WHEN_HIDDEN = new CFG<>("ui.chat.hidden_popups", true);
     public static final CFG<Boolean> LOCK_STUDY = new CFG<>("ui.lock_study", false);
     public static final CFG<Boolean> MMAP_LIST = new CFG<>("ui.mmap_list", true);
     public static final CFG<Boolean> MMAP_VIEW = new CFG<>("ui.mmap_view", false);
@@ -112,9 +128,12 @@ public class CFG<T> {
     public static final CFG<Boolean> MMAP_SHOW_MARKER_NAMES = new CFG<>("ui.mmap_mnames", false);
     public static final CFG<Boolean> MMAP_SHOW_PARTY_NAMES = new CFG<>("ui.mmap_party_names", false);
     public static final CFG<Integer> MMAP_SHOW_PARTY_NAMES_STYLE = new CFG<>("ui.mmap_party_names_style", 0);
+    public static final CFG<Boolean> DISABLE_MENU_KEYS = new CFG<>("ui.disable_menu_keys", false);
     public static final CFG<Boolean> MENU_SINGLE_CTRL_CLICK = new CFG<>("ui.menu_single_ctrl_click", true);
     public static final CFG<UI.KeyMod> MENU_SKIP_AUTO_CHOOSE = new CFG<>("ui.menu_skip_auto_choose", UI.KeyMod.SHIFT);
     public static final CFG<Boolean> MENU_ADD_PICK_ALL = new CFG<>("ui.menu_add_pick_all", false);
+    public static final CFG<Boolean> MAZES_SEND_PINGS = new CFG<>("ui.mazes.send_pings", true);
+    public static final CFG<Boolean> MAZES_TARGET_CLOSEST_COMBAT = new CFG<>("ui.mazes.target_closest_combat", false);
     
     public static final CFG<Map<String, Map<String, Boolean>>> WARN_CONFIG = new CFG<>("general.warning", new HashMap<>());
     public static final CFG<Boolean> REAL_TIME_CURIO = new CFG<>("ui.real_time_curio", false);
@@ -230,6 +249,10 @@ public class CFG<T> {
     public static final CFG<Boolean> LEGACY_BGM_ENABLED = new CFG<>("audio.legacy_bgm.enabled", false);
     public static final CFG<Boolean> LEGACY_BGM_NO_COOLDOWN = new CFG<>("audio.legacy_bgm.no_cooldown", false);
     public static final CFG<Double> LEGACY_BGM_VOLUME = new CFG<>("audio.legacy_bgm.volume", 0.5, new com.google.gson.reflect.TypeToken<Double>(){});
+    public static final CFG<Boolean> IMPROVED_INSTRUMENT_MUSIC_WINDOW = new CFG<>("audio.instrument.improved_window", true);
+    public static final CFG<Integer> INSTRUMENTS_SOUND_VOLUME = new CFG<>("audio.instrument.volume", 70);
+    public static final CFG<String> ACTIVE_CONFIG_PROFILE = new CFG<>("profiles.active", "default");
+    public static final CFG<Map<String, Map<String, Object>>> CONFIG_PROFILES = new CFG<>("profiles.saved", new HashMap<>(), new TypeToken<Map<String, Map<String, Object>>>(){});
 
     private static final String CONFIG_JSON = "config.json";
     private static final Map<Object, Object> cfg;
@@ -297,6 +320,10 @@ public class CFG<T> {
 
     public T get() {
 	return CFG.get(this);
+    }
+
+    public String path() {
+	return path;
     }
 
     public void set(T value) {
@@ -393,6 +420,38 @@ public class CFG<T> {
 	    map.put(parts[parts.length - 1], value);
 	}
 	if(store) {store();}
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static synchronized void setObject(CFG cfg, Object value, boolean store) {
+	Object coerced = coerce(cfg, value);
+	set(cfg, coerced, store);
+	cfg.observe();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object coerce(CFG name, Object data) {
+	if(data == null)
+	    return name.def;
+	Class<?> defClass = name.def.getClass();
+	if(defClass.isAssignableFrom(data.getClass()))
+	    return data;
+	if(name.t != null)
+	    return gson.fromJson(gson.toJson(data), name.t);
+	if(Map.class.isAssignableFrom(defClass) && Map.class.isAssignableFrom(data.getClass()))
+	    return data;
+	if(Number.class.isAssignableFrom(defClass) && data instanceof Number)
+	    return ClientUtils.num2value((Number)data, (Class<? extends Number>)defClass);
+	if(Color.class.isAssignableFrom(defClass)) {
+	    String hex = data instanceof String ? (String)data : null;
+	    return ClientUtils.hex2color(hex, (Color)name.def);
+	}
+	if(Enum.class.isAssignableFrom(defClass)) {
+	    Class<? extends Enum> enumType = Reflect.getEnumSuperclass(defClass);
+	    if(enumType != null)
+		return Enum.valueOf(enumType, data.toString());
+	}
+	return data;
     }
 
     private static synchronized void store() {

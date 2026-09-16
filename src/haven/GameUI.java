@@ -104,6 +104,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public BeltSlot[] belt = new BeltSlot[144];
     public Widget beltwdg;
     public MapMenuBar mapmenubar;
+    public ChatPopup chatpop;
     public GUIEditPanel guieditpanel;
     public final Map<Integer, String> polowners = new HashMap<Integer, String>();
     public Bufflist buffs;
@@ -113,6 +114,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public TimerPanel timers;
     public StudyWnd studywnd;
     public QuestObjectivesWindow questObjectivesWindow;
+    public BuilderWnd builderwnd;
 
     public static boolean verifiedAccount = false;
     public static boolean subscribedAccount = false;
@@ -389,6 +391,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	foldbuttons();
 	mapmenubar = add(new MapMenuBar(), Coord.z);
 	mapmenubar.raise();
+	chatpop = add(new ChatPopup(), Coord.z);
+	chatpop.raise();
 	guieditpanel = add(new GUIEditPanel(), Coord.z);
 	guieditpanel.raise();
 	if(CFG.HIDE_GAMEUI_PORTRAIT.get()) {
@@ -396,13 +400,33 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	} else {
 	    portrait = ulpanel.add(Frame.with(new Avaview(Avaview.dasz, plid, "avacam"), false), UI.scale(10, 10));
 	}
-	buffs = ulpanel.add(new Bufflist(), portrait.c.x + portrait.sz.x + UI.scale(10), portrait.c.y + ((IMeter.fsz.y + UI.scale(2)) * 2) + UI.scale(5 - 2));
+	buffs = ulpanel.add(new Bufflist("player"), portrait.c.x + portrait.sz.x + UI.scale(10), portrait.c.y + ((IMeter.fsz.y + UI.scale(2)) * 2) + UI.scale(5 - 2));
 	calendar = umpanel.add(new Cal(), Coord.z);
 	eqproxyHandBelt = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_HAND, SLOTS.HAND_LEFT, SLOTS.HAND_RIGHT, SLOTS.BELT), UI.scale(420, 5));
 	eqproxyPouchBack = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_POUCH, "EquipProxy2", SLOTS.POUCH_LEFT, SLOTS.POUCH_RIGHT, SLOTS.BACK), UI.scale(420, 35));
 	syslog = chat.add(new ChatUI.Log("System"));
 	opts = add(new OptWnd());
 	opts.hide();
+	builderwnd = add(new BuilderWnd(), Utils.getprefc("wndc-builder", UI.scale(new Coord(240, 160))));
+	builderwnd.show((ConfigProfiles.active() == ConfigProfiles.Mode.BUILDER) || CFG.SHOW_BUILDER_WINDOW.get());
+	CFG.SHOW_BUILDER_WINDOW.observe(cfg -> {
+	    if((ConfigProfiles.active() == ConfigProfiles.Mode.BUILDER) && !cfg.get()) {
+		cfg.set(true);
+		return;
+	    }
+	    builderwnd.show(cfg.get());
+	    if(builderwnd.visible())
+		builderwnd.raise();
+	});
+	CFG.ACTIVE_CONFIG_PROFILE.observe(cfg -> {
+	    if(ConfigProfiles.active() == ConfigProfiles.Mode.BUILDER) {
+		CFG.SHOW_BUILDER_WINDOW.set(true);
+		builderwnd.show();
+		builderwnd.raise();
+	    } else {
+		builderwnd.show(CFG.SHOW_BUILDER_WINDOW.get());
+	    }
+	});
 	zerg = add(new Zergwnd(), Utils.getprefc("wndc-zerg", UI.scale(new Coord(187, 50))));
 	zerg.hide();
 	questHelper = add(new QuestHelper(this), UI.scale(new Coord(187, 50)));
@@ -434,12 +458,15 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	ui.setGUI(this);
 	ui.sess.user.genus = genus;
 	Config.initAutomapper(ui);
+	ClientUpdater.checkStartup(this);
 	Timer.start(this);
 	super.attach(ui);
     }
 
     @Override
     public void destroy() {
+	if(fsess != null)
+	    fsess.forceDestroy();
 	closeWindows();
 	untrackAllMarkers();
 	super.destroy();
@@ -1188,7 +1215,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	if(last == null && !meters.isEmpty()) {
 	    last = meterbox(meters.get(meters.size() - 1));
 	}
-	if(last != null) {
+	if((last != null) && !buffs.hasCustomPosition()) {
 	    buffs.c.y = last.c.y + last.sz.y + UI.scale(2);
 
 	}
@@ -1303,6 +1330,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    Utils.setprefc("wndc-quest-objectives", questObjectivesWindow.c);
 	if(questObjectivesWindow != null)
 	    Utils.setprefc("wndsz-quest-objectives", questObjectivesWindow.csz());
+	if(builderwnd != null)
+	    Utils.setprefc("wndc-builder", builderwnd.c);
 	if(zerg != null)
 	    Utils.setprefc("wndc-zerg", zerg.c);
 	if(mapfile != null) {
@@ -1372,6 +1401,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	} else if(place == "fight") {
 	    fv = urpanel.add((Fightview)child, 0, 0);
 	} else if(place == "fsess") {
+	    if(fsess != null)
+		fsess.forceDestroy();
 	    fsess = add((Fightsess)child, Coord.z);
 	} else if(place == "inv") {
 	    invwnd = new Hidewnd(Coord.z, "Inventory") {
@@ -1582,6 +1613,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    }
 	} else if(w == chrwdg) {
 	    chrwdg = null;
+	} else if(w == fsess) {
+	    fsess = null;
 	}
 	if(w instanceof MeterWidgetBox) {
 	    meters.remove(((MeterWidgetBox)w).meter);
@@ -1681,9 +1714,6 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 		g.chcolor();
 		g.image(lastmsg.tex(), new Coord(blpw + UI.scale(10), by -= UI.scale(20)));
 	    }
-	}
-	if(!chat.visible()) {
-	    chat.drawsmall(g, new Coord(blpw + UI.scale(10), by), UI.scale(100));
 	}
     }
 
@@ -2194,7 +2224,15 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_hide = KeyBinding.get("ui-toggle", KeyMatch.nil);
     public static final KeyBinding kb_logout = KeyBinding.get("logout", KeyMatch.nil);
     public static final KeyBinding kb_switchchr = KeyBinding.get("logout-cs", KeyMatch.nil);
+    public boolean keydown(KeyDownEvent ev) {
+	if((fsess != null) && fsess.handleUtilityKey(ev))
+	    return(true);
+	return(super.keydown(ev));
+    }
+
     public boolean globtype(GlobKeyEvent ev) {
+	if((fsess != null) && fsess.handleUtilityKey(ev))
+	    return(true);
 	if(ev.c == ':') {
 	    entercmd();
 	    return(true);
@@ -2646,6 +2684,41 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    super.mousemove(ev);
 	}
 
+    }
+
+    public class ChatPopup extends DraggableWidget {
+	public ChatPopup() {
+	    super("ChatPopup");
+	    resize(UI.scale(520, 100));
+	}
+
+	protected void added() {
+	    super.added();
+	    moveDefault();
+	}
+
+	public void presize() {
+	    moveDefault();
+	}
+
+	private void moveDefault() {
+	    if(!hasCustomPosition())
+		c = Coord.of(blpw + UI.scale(10), GameUI.this.sz.y - sz.y);
+	}
+
+	public void draw(GOut g) {
+	    visible = CFG.SHOW_CHAT_POPUPS_WHEN_HIDDEN.get();
+	    if(!visible)
+		return;
+	    chat.drawsmall(g, Coord.of(0, sz.y), sz.y);
+	    super.draw(g);
+	}
+
+	public boolean mousedown(MouseDownEvent ev) {
+	    if(!CFG.SHOW_CHAT_POPUPS_WHEN_HIDDEN.get())
+		return(false);
+	    return(super.mousedown(ev));
+	}
     }
 
     public class GUIEditPanel extends Widget {

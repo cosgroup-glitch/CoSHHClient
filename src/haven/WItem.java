@@ -274,6 +274,12 @@ public class WItem extends Widget implements DTarget {
 		g.chcolor();
 	    }
 	    drawmain(g, spr);
+	    Color tableFoodStatColor = tableFoodStatOutline(this);
+	    if(tableFoodStatColor != null) {
+		g.chcolor(tableFoodStatColor);
+		g.rect(Coord.z, sz);
+		g.chcolor();
+	    }
 	    g.defstate();
 	    GItem.InfoOverlay<?>[] ols = itemols.get();
 	    if(item.alchemyMatches()) {

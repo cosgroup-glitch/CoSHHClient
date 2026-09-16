@@ -519,6 +519,16 @@ public class OptWnd extends WindowX {
 			me.ender.LegacyAudioPlayer.setVolume(v);
 		    }
 		}, prev.pos("bl").adds(0, 2));
+	    prev = add(new CFGBox("Improved instrument music window",
+				  CFG.IMPROVED_INSTRUMENT_MUSIC_WINDOW,
+				  "Adds a wider keyboard and a MIDI file player to instrument windows."),
+		       prev.pos("bl").adds(0, 15));
+	    prev = add(new Label("Instrument sound volume"), prev.pos("bl").adds(0, 5));
+	    prev = add(new HSlider(UI.scale(200), 0, 100, CFG.INSTRUMENTS_SOUND_VOLUME.get()) {
+		    public void changed() {
+			CFG.INSTRUMENTS_SOUND_VOLUME.set(val);
+		    }
+		}, prev.pos("bl").adds(0, 2));
 	    add(new PButton(UI.scale(200), "Back", 27, back), prev.pos("bl").adds(0, 30));
 	    pack();
 	}
@@ -567,8 +577,17 @@ public class OptWnd extends WindowX {
 				       dpy.settext((this.val == 17) ? "\u221e" : Integer.toString(this.val));
 				   }
 				   public void changed() {
-				       Utils.setprefd("plobpgran", MapView.plobpgran = ((this.val == 17) ? 0 : this.val));
+				       MapView.setPlaceGrid((this.val == 17) ? 0 : this.val);
 				       dpy();
+				   }
+				   public void tick(double dt) {
+				       super.tick(dt);
+				       int nval = (int)Math.round(MapView.plobpgran);
+				       nval = (nval == 0) ? 17 : Math.max(2, Math.min(17, nval));
+				       if(this.val != nval) {
+					   this.val = nval;
+					   dpy();
+				       }
 				   }
 			       },
 			   dpy);
@@ -592,8 +611,20 @@ public class OptWnd extends WindowX {
 				       dpy.settext(String.format("%d\u00b0", 360 / vals[this.val]));
 				   }
 				   public void changed() {
-				       Utils.setprefd("plobagran", MapView.plobagran = (vals[this.val] / 2.0));
+				       MapView.setPlaceAngle(vals[this.val] / 2.0);
 				       dpy();
+				   }
+				   public void tick(double dt) {
+				       super.tick(dt);
+				       int nval = 0;
+				       for(int i = 0; i < vals.length; i++) {
+					   if(Math.abs((MapView.plobagran * 2) - vals[i]) < Math.abs((MapView.plobagran * 2) - vals[nval]))
+					       nval = i;
+				       }
+				       if(this.val != nval) {
+					   this.val = nval;
+					   dpy();
+				       }
 				   }
 			       },
 			   dpy);
@@ -860,10 +891,11 @@ public class OptWnd extends WindowX {
 	mrow = Math.max(mrow, row);
 	row = 0;
 
-	addPanelButton("Map upload", 'm', mapping, colum, row++);
-	addPanelButton("Automation settings", 't', automation, colum, row++);
-	addPanelButton("Experimental", 'x', experimental, colum, row++);
-	main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
+	    addPanelButton("Map upload", 'm', mapping, colum, row++);
+	    addPanelButton("Automation settings", 't', automation, colum, row++);
+	    addPanelButton("Experimental", 'x', experimental, colum, row++);
+	    main.add(new Button(UI.scale(200), "Check for updates", false).action(this::checkForUpdates), UI.scale(PANEL_POS.mul(colum, row++)));
+	    main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
 
 	int y = 0;
 	mrow = Math.max(mrow, row);
@@ -931,6 +963,33 @@ public class OptWnd extends WindowX {
 
     private void addPanelButton(String name, char key, Action action, int x, int y) {
 	main.add(new AButton(UI.scale(200), name, key, action), UI.scale(PANEL_POS.mul(x, y)));
+    }
+
+    private void checkForUpdates() {
+	GameUI gui = getparent(GameUI.class);
+	if(!ClientUpdater.configured()) {
+	    if(gui != null)
+		gui.msg("No update manifest is configured.", GameUI.MsgType.INFO);
+	    return;
+	}
+	Thread th = new HackThread(() -> {
+	    try {
+		ClientUpdater.UpdateInfo update = ClientUpdater.check();
+		if(!update.newer()) {
+		    if(gui != null)
+			gui.msg("Kami Client is up to date.", GameUI.MsgType.GOOD);
+		    return;
+		}
+		if(gui != null)
+		    gui.msg("Downloading Kami Client update " + update.version + ". The client will restart.", GameUI.MsgType.INFO);
+		ClientUpdater.install(update);
+	    } catch(Exception e) {
+		if(gui != null)
+		    gui.msg("Update failed: " + e.getMessage(), GameUI.MsgType.ERROR);
+		e.printStackTrace(Debug.log);
+	    }
+	}, "Kami Client updater");
+	th.start();
     }
 
     private void initCameraPanel() {
@@ -1165,6 +1224,9 @@ public class OptWnd extends WindowX {
 	}, tx, y).change(CFG.MENU_SKIP_AUTO_CHOOSE.get());
 
 	y += STEP;
+	panel.add(new CFGBox("Disable menu keys", CFG.DISABLE_MENU_KEYS, "Prevents the bottom-right action menu hotkeys from firing."), x, y);
+
+	y += STEP;
 	panel.add(new CFGBox("Single item CTRL choose", CFG.MENU_SINGLE_CTRL_CLICK, "If checked, will automatically select single item menus if CTRL is pressed when menu is opened."), x, y);
 
 	y += STEP;
@@ -1264,6 +1326,26 @@ public class OptWnd extends WindowX {
 	}, x + tx + UI.scale(10), y + UI.scale(1));
 
 	y += 35;
+	panel.add(new Label("Hitboxes:"), x, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Show hitboxes", CFG.DISPLAY_GOB_HITBOX, "Shows object collision boxes.", true), x + H_STEP, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Draw hitboxes on top", CFG.DISPLAY_GOB_HITBOX_TOP, "Draws hitboxes through objects.", true), x + H_STEP, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Fill hitboxes", CFG.DISPLAY_GOB_HITBOX_FILLED, "Fills non-passable hitboxes with a translucent solid color.", true), x + H_STEP, y);
+
+	y += STEP;
+	tx = x + H_STEP;
+	tx += panel.add(new CFGColorBtn(CFG.COLOR_HBOX_SOLID, "Outline color", true), tx, y).sz.x + H_STEP;
+	panel.add(new CFGColorBtn(CFG.COLOR_HBOX_FILLED, "Fill color", true), tx, y);
+
+	y += STEP;
+	panel.add(new CFGColorBtn(CFG.COLOR_HBOX_PASSABLE, "Passable color", true), x + H_STEP, y);
+
+	y += STEP;
 	panel.add(new CFGBox("Show object radius", CFG.SHOW_GOB_RADIUS, "Shows radius of mine supports, beehives etc.", true), x, y);
 
 	y += STEP;
@@ -1391,6 +1473,9 @@ public class OptWnd extends WindowX {
 	panel.add(new CFGBox("Show pouches and back widget", CFG.UI_SHOW_EQPROXY_POUCH, "Small draggable widget for quick access to pouches and back slots"), x, y);
 
 	y += STEP;
+	panel.add(new CFGBox("Show Builder window", CFG.SHOW_BUILDER_WINDOW, "Shows placement grid and angle controls. Builder Mode always keeps this window on.", true), x, y);
+
+	y += STEP;
 	panel.add(new CFGBox("Show F-key tool bar", CFG.SHOW_TOOLBELT_0), x, y);
 
 	y += STEP;
@@ -1425,6 +1510,9 @@ public class OptWnd extends WindowX {
 
 	y += STEP;
 	panel.add(new CFGBox("Show timestamps in chat messages", CFG.SHOW_CHAT_TIMESTAMP), new Coord(x, y));
+
+	y += STEP;
+	panel.add(new CFGBox("Show movable chat popup", CFG.SHOW_CHAT_POPUPS_WHEN_HIDDEN), new Coord(x, y));
 
 	y += STEP;
 	panel.add(new CFGBox("Instant full tooltips", CFG.UI_INSTANT_LONG_TIPS, "Items will show full tooltip immediately", true), x, y);

@@ -40,6 +40,8 @@ import haven.MapFile.DataGrid;
 import haven.MapFile.GridInfo;
 import haven.MapFile.Marker;
 import haven.MapFile.TileInfo;
+import haven.sprites.MapSprite;
+import me.ender.ChatCommands;
 import me.ender.ClientUtils;
 import me.ender.QuestCondition;
 import me.ender.gob.KinInfo;
@@ -68,6 +70,7 @@ public class MiniMap extends Widget {
     protected Segment dseg;
     protected int dlvl, dmag;
     protected Location dloc;
+    private final List<MapSprite> mapSprites = new LinkedList<>();
     private Resource biome = null;
     private Tex biometex;
     public boolean big = false;
@@ -414,6 +417,7 @@ public class MiniMap extends Widget {
 	    } catch(Loading l) {
 	    }
 	}
+	ticksprites(dt);
 	icons = findicons(icons);
 	if(tvisible()) {
 	    Location loc = this.curloc;
@@ -1117,6 +1121,28 @@ public class MiniMap extends Widget {
 	}
     }
 
+    private void drawsprites(GOut g) {
+	synchronized (mapSprites) {
+	    for(MapSprite mapSprite : mapSprites)
+		mapSprite.draw(g, p2c(mapSprite.rc), zoomlevel);
+	}
+    }
+
+    private void ticksprites(double dt) {
+	synchronized (mapSprites) {
+	    for(Iterator<MapSprite> it = mapSprites.iterator(); it.hasNext();) {
+		if(it.next().tick(dt))
+		    it.remove();
+	    }
+	}
+    }
+
+    public void addSprite(MapSprite mapSprite) {
+	synchronized (mapSprites) {
+	    mapSprites.add(mapSprite);
+	}
+    }
+
     private static void drawPartyName(GOut g, Party.Member m, Coord c) {
 	Gob gob = m.getgob();
 	KinInfo ki = gob != null ? gob.kin() : KinInfo.cached(m.gobid);
@@ -1146,6 +1172,7 @@ public class MiniMap extends Widget {
 	if(dlvl <= 1)
 	    drawicons(g);
 	if(playerSegment) drawparty(g);
+	if(playerSegment) drawsprites(g);
 	if(CFG.MMAP_SHOW_BIOMES.get()) {drawbiome(g); }
     }
 
@@ -1317,6 +1344,8 @@ public class MiniMap extends Widget {
     public boolean mousedown(MouseDownEvent ev) {
 	dsloc = xlate(ev.c);
 	if(dsloc != null) {
+	    if(ev.b == 3 && ui.modmeta && sendPartyMapPing(dsloc))
+		return true;
 	    dsicon = iconat(ev.c);
 	    dsmark = markerat(dsloc.tc);
 	    if((dsicon != null) && clickicon(dsicon, dsloc, ev.b, true))
@@ -1341,6 +1370,14 @@ public class MiniMap extends Widget {
 	    return(true);
 	}
 	return(super.mousedown(ev));
+    }
+
+    private boolean sendPartyMapPing(Location loc) {
+	if((sessloc == null) || (loc == null) || (loc.seg != sessloc.seg))
+	    return false;
+	Coord2d offset = loc.tc.sub(sessloc.tc).mul(tilesz).add(tilesz.div(2));
+	ChatCommands.sendPartyMapPing(ui, offset.floor());
+	return true;
     }
 
     public void mousemove(MouseMoveEvent ev) {

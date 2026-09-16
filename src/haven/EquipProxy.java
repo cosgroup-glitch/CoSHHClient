@@ -47,6 +47,8 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     
     @Override
     public boolean mousehover(MouseHoverEvent ev, boolean on) {
+	if(!contentsVisible())
+	    return false;
 	Equipory e = getEquipory();
 	over = on;
 	MouseHoverEvent zev = new MouseHoverEvent(ev, Coord.z);
@@ -74,6 +76,8 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     
     @Override
     public boolean mousedown(MouseDownEvent ev) {
+	if(!contentsVisible())
+	    return super.mousedown(ev);
 	Equipory e = getEquipory();
 	if (ev.c.x >= sz.x-18)
 	    return super.mousedown(ev);
@@ -90,8 +94,9 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     
     @Override
     public void draw(GOut g) {
-	Equipory equipory = getEquipory();
-	if(equipory != null) {
+	if(contentsVisible()) {
+	    Equipory equipory = getEquipory();
+	    if(equipory != null) {
 	    int k = 0;
 	    if (over && !locked) {
 		g.chcolor(BG_COLOR);
@@ -112,10 +117,14 @@ public class EquipProxy extends DraggableWidget implements DTarget {
 		k++;
 	    }
 	}
+	}
+	drawEditOverlay(g);
     }
     
     @Override
     public Object tooltip(Coord c, Widget prev) {
+	if(!contentsVisible())
+	    return super.tooltip(c, prev);
 	Equipory e = getEquipory();
 	if (c.x >= sz.x-18)
 	    return super.tooltip(c, prev);
@@ -133,6 +142,8 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     
     @Override
     public boolean drop(Drop ev) {
+	if(!contentsVisible())
+	    return false;
 	Equipory e = getEquipory();
 	if(e != null) {
 	    e.wdgmsg("drop", slot(ev.c).idx);
@@ -150,6 +161,8 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     
     @Override
     public boolean iteminteract(Interact ev) {
+	if(!contentsVisible())
+	    return false;
 	Equipory e = getEquipory();
 	if(e != null) {
 	    WItem w = e.slots[slot(ev.c).idx];
@@ -161,7 +174,7 @@ public class EquipProxy extends DraggableWidget implements DTarget {
     }
     
     public void activate(Equipory.SLOTS slot, int button) {
-	if(!visible) {return;}
+	if(!visible || !contentsVisible()) {return;}
 	Equipory e = getEquipory();
 	boolean empty = e == null || e.slots[slot.idx] == null;
 	if(empty) {button = 1;}

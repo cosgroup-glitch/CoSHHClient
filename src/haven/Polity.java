@@ -40,7 +40,7 @@ public abstract class Polity extends Widget {
     public int mseq;
     protected Widget mw;
     private int nextmemb = 0;
-    private int vactiony = -1;
+    private int actiony = -1;
 
     public abstract String type();
 
@@ -144,12 +144,10 @@ public abstract class Polity extends Widget {
 	this.name = name;
     }
 
-    private boolean reflowVillageDetails() {
-	if(!"Village".equals(cap))
-	    return(false);
+    private boolean reflowMemberDetails() {
 	Widget acts = null;
 	for(Widget ch = child; ch != null; ch = ch.next) {
-	    if(isVillageActionBlock(ch)) {
+	    if(isActionBlock(ch)) {
 		acts = ch;
 		break;
 	    }
@@ -157,11 +155,11 @@ public abstract class Polity extends Widget {
 	if(acts == null)
 	    return(false);
 	boolean changed = false;
-	if(vactiony < 0)
-	    vactiony = acts.c.y;
+	if(actiony < 0)
+	    actiony = acts.c.y;
 	if((mw == null) || !mw.visible) {
-	    if(acts.visible && (acts.c.y != vactiony)) {
-		acts.move(new Coord(acts.c.x, vactiony));
+	    if(acts.visible && (acts.c.y != actiony)) {
+		acts.move(new Coord(acts.c.x, actiony));
 		changed = true;
 	    }
 	    return(changed);
@@ -179,7 +177,7 @@ public abstract class Polity extends Widget {
 	    mw.raise();
 	    changed = true;
 	}
-	int my = vactiony;
+	int my = actiony;
 	if(mw.c.y != my) {
 	    mw.move(new Coord(mw.c.x, my));
 	    changed = true;
@@ -192,7 +190,7 @@ public abstract class Polity extends Widget {
 	return(changed);
     }
 
-    private boolean isVillageActionBlock(Widget w) {
+    private boolean isActionBlock(Widget w) {
 	if(w.getClass() != Widget.class)
 	    return(false);
 	if(w.sz.x < width)
@@ -208,30 +206,30 @@ public abstract class Polity extends Widget {
 	return(hasButton && hasLabel);
     }
 
-    public boolean blocksVillageActionButton(Button button, Coord bc) {
-	if(!"Village".equals(cap) || (mw == null) || !mw.visible)
+    public boolean blocksActionButton(Button button, Coord bc) {
+	if((mw == null) || !mw.visible)
 	    return(false);
-	if(!isVillageActionBlock(button.parent))
+	if(!isActionBlock(button.parent))
 	    return(false);
 	return(button.rootpos(bc).isect(mw.rootpos(), mw.sz));
     }
 
     @Override
     public void pack() {
-	reflowVillageDetails();
+	reflowMemberDetails();
 	super.pack();
     }
 
     @Override
     public void cresize(Widget ch) {
-	reflowVillageDetails();
+	reflowMemberDetails();
 	super.cresize(ch);
     }
 
     @Override
     public void tick(double dt) {
 	super.tick(dt);
-	if(reflowVillageDetails())
+	if(reflowMemberDetails())
 	    super.pack();
     }
 

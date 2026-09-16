@@ -691,16 +691,19 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	setcanfocus(true);
 	disposables.add(CFG.DISPLAY_GOB_HITBOX.observe(this::updatePlobDrawable));
 	disposables.add(CFG.DISPLAY_GOB_HITBOX_TOP.observe(this::updatePlobDrawable));
+	disposables.add(CFG.DISPLAY_GOB_HITBOX_FILLED.observe(this::updatePlobDrawable));
 	disposables.add(CFG.SHOW_GOB_RADIUS.observe(this::updateSupportOverlay));
 	disposables.add(CFG.COLOR_MINE_SUPPORT_OVERLAY.observe(this::updateSupportOverlayColor));
 	disposables.add(CFG.COLOR_MINE_SUPPORT_SINGLE_OVERLAY.observe(this::updateSupportOverlayColor));
 	disposables.add(CFG.COLOR_MINE_SUPPORT_DAMAGED_OVERLAY.observe(this::updateSupportOverlayColor));
 	disposables.add(CFG.COLOR_MINE_SUPPORT_VIRTUAL_OVERLAY.observe(this::updateSupportOverlayColor));
 	disposables.add(CFG.COLOR_TILE_GRID.observe(this::updateGridMat));
+	disposables.add(CFG.SHOW_WORLD_GRID.observe(cfg -> showgrid(cfg.get())));
 	disposables.add(CFG.DISPLAY_FLAVOR.observe(terrain::updateFlavor));
 	disposables.add(CFG.SHOW_MINESWEEPER_OVERLAY.observe(terrain::updateMinesweeper));
 	updateSupportOverlay();
 	updateGridMat(null);
+	showgrid(CFG.SHOW_WORLD_GRID.get());
     }
     
     private void updatePlobDrawable(CFG<Boolean> cfg) {
@@ -2371,6 +2374,10 @@ public class MapView extends PView implements DTarget, Console.Directory {
 			Reactor.GOB_INTERACT.onNext(gob);
 		    }
 		    if(clickb == 3) {FlowerMenu.lastGob(gob);}
+		    if(ui.modflags(UI.MOD_CTRL_ALT) && clickb == 3 && gob.is(GobTag.PLAYER)) {
+			ChatCommands.sendPartyTargetMarker(ui, gob);
+			return;
+		    }
 		    if(ui.modflags(UI.MOD_CTRL_ALT) && clickb == 1) {
 			ChatCommands.sendGobHighlight(ui, gob.id);
 			return;
@@ -2547,7 +2554,7 @@ public class MapView extends PView implements DTarget, Console.Directory {
     public static final KeyBinding kb_grid = KeyBinding.get("grid", KeyMatch.forchar('G', KeyMatch.C));
     public boolean globtype(GlobKeyEvent ev) {
 	if(kb_grid.key().match(ev)) {
-	    showgrid(gridlines == null);
+	    CFG.SHOW_WORLD_GRID.set(gridlines == null);
 	    return(true);
 	}
 	return(super.globtype(ev));
@@ -2806,16 +2813,12 @@ public class MapView extends PView implements DTarget, Console.Directory {
     static {
 	Console.setscmd("placegrid", new Console.Command() {
 	    public void run(Console cons, String[] args) {
-		if((plobpgran = Double.parseDouble(args[1])) < 0)
-		    plobpgran = 0;
-		Utils.setprefd("plobpgran", plobpgran);
+		setPlaceGrid(Double.parseDouble(args[1]));
 	    }
 	});
 	Console.setscmd("placeangle", new Console.Command() {
 	    public void run(Console cons, String[] args) {
-		if((plobagran = Double.parseDouble(args[1])) < 2)
-		    plobagran = 2;
-		Utils.setprefd("plobagran", plobagran);
+		setPlaceAngle(Double.parseDouble(args[1]));
 	    }
 	});
 	Console.setscmd("clickfuzz", new Console.Command() {
@@ -2829,6 +2832,20 @@ public class MapView extends PView implements DTarget, Console.Directory {
 		clickdb = Utils.parsebool(args[1], false);
 	    }
 	});
+    }
+
+    public static void setPlaceGrid(double val) {
+	if(val < 0)
+	    val = 0;
+	plobpgran = val;
+	Utils.setprefd("plobpgran", plobpgran);
+    }
+
+    public static void setPlaceAngle(double val) {
+	if(val < 2)
+	    val = 2;
+	plobagran = val;
+	Utils.setprefd("plobagran", plobagran);
     }
     
     public void zoomCamera(int amount) { camera.wheel(new MouseWheelEvent(Coord.z, amount, amount)); }

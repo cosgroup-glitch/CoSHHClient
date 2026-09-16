@@ -45,6 +45,7 @@ public class Fightview extends Widget {
     public final Bufflist buffs = add(new Bufflist()); {buffs.hide();}
     public final Map<Long, Widget> obinfo = new HashMap<>();
     public final Rellist lsdisp;
+    public final Label attackRangeLabel;
     public Relation current = null;
     public Indir<Resource> blk, batk, iatk;
     public double atkcs, atkct;
@@ -59,6 +60,7 @@ public class Fightview extends Widget {
     public double lastuse = 0;
     public Mainrel curdisp;
     private List<Relation> nonmain = Collections.emptyList();
+    private double closestTargetTimer = 0;
 
     public class Relation {
         public final long gobid;
@@ -209,6 +211,8 @@ public class Fightview extends Widget {
     public Fightview() {
         super(new Coord(width, (bg.sz().y + ymarg) * height));
 	lsdisp = add(new Rellist(height));
+	attackRangeLabel = add(new Label(""));
+	attackRangeLabel.hide();
 	layout();
     }
 
@@ -267,7 +271,12 @@ public class Fightview extends Widget {
 	    pos = curdisp.pos("br");
 	}
 	lsdisp.move(pos.add(-lsdisp.sz.x, UI.scale(10)));
-	resize(sz.x, lsdisp.c.y + lsdisp.sz.y);
+	if(attackRangeLabel.visible) {
+	    attackRangeLabel.move(Coord.of(0, lsdisp.c.y + lsdisp.sz.y + UI.scale(5)));
+	    resize(sz.x, attackRangeLabel.c.y + attackRangeLabel.sz.y);
+	} else {
+	    resize(sz.x, lsdisp.c.y + lsdisp.sz.y);
+	}
     }
 
     private void updrel() {
@@ -301,6 +310,81 @@ public class Fightview extends Widget {
 	    if(inf != null)
 		inf.tick(dt);
 	}
+	if(CFG.MAZES_TARGET_CLOSEST_COMBAT.get())
+	    targetClosestCombat(dt);
+	updateAttackRangeLabel();
+    }
+
+    private void targetClosestCombat(double dt) {
+	closestTargetTimer -= dt;
+	if(closestTargetTimer > 0)
+	    return;
+	closestTargetTimer = 0.25;
+	double range = CombatWeaponRange.equippedRange(ui.gui);
+	if((current != null) && !Double.isNaN(range) && relationWithinRange(current, range))
+	    return;
+	Relation rel = closestRelation(range);
+	if((rel != null) && (rel != current))
+	    wdgmsg("bump", (int)rel.gobid);
+    }
+
+    private Relation closestRelation(double range) {
+	Gob player = (ui != null) && (ui.gui != null) && (ui.gui.map != null) ? ui.gui.map.player() : null;
+	if(player == null)
+	    return null;
+	Relation bestInRange = null, bestAny = null;
+	double bestInRangeDist = Double.MAX_VALUE, bestAnyDist = Double.MAX_VALUE;
+	for(Relation rel : lsrel) {
+	    Gob gob = ui.sess.glob.oc.getgob(rel.gobid);
+	    if((gob == null) || gob.disposed())
+		continue;
+	    double dist = player.rc.dist(gob.rc);
+	    if(dist < bestAnyDist) {
+		bestAny = rel;
+		bestAnyDist = dist;
+	    }
+	    if(!Double.isNaN(range) && CombatWeaponRange.withinRange(dist, range) && dist < bestInRangeDist) {
+		bestInRange = rel;
+		bestInRangeDist = dist;
+	    }
+	}
+	return bestInRange != null ? bestInRange : bestAny;
+    }
+
+    private boolean relationWithinRange(Relation rel, double range) {
+	Gob player = (ui != null) && (ui.gui != null) && (ui.gui.map != null) ? ui.gui.map.player() : null;
+	if(player == null || rel == null)
+	    return false;
+	Gob gob = ui.sess.glob.oc.getgob(rel.gobid);
+	if((gob == null) || gob.disposed())
+	    return false;
+	return CombatWeaponRange.withinRange(player.rc.dist(gob.rc), range);
+    }
+
+    private void updateAttackRangeLabel() {
+	boolean show = CFG.SHOW_ATTACK_RANGE.get();
+	if(show != attackRangeLabel.visible) {
+	    if(show)
+		attackRangeLabel.show();
+	    else
+		attackRangeLabel.hide();
+	    layout();
+	}
+	if(!show)
+	    return;
+	double range = CombatWeaponRange.equippedRange(ui.gui);
+	String weapon = CombatWeaponRange.equippedName(ui.gui);
+	String rtext = Double.isNaN(range) ? "--" : String.format("%.1f", range);
+	String dtext = "--";
+	if(current != null && ui.gui != null && ui.gui.map != null && ui.gui.map.player() != null) {
+	    Gob target = ui.sess.glob.oc.getgob(current.gobid);
+	    if(target != null && !target.disposed()) {
+		double dist = CombatWeaponRange.displayDistance(ui.gui.map.player().rc.dist(target.rc), range);
+		dtext = String.format("%.1f", dist);
+	    }
+	}
+	attackRangeLabel.settext(String.format("Range %s  Dist %s", rtext, dtext));
+	attackRangeLabel.settip(weapon == null ? "" : weapon);
     }
 
     public static class Notfound extends RuntimeException {

@@ -43,6 +43,8 @@ public enum Action {
     AGGRO_ONE_PVE(Actions::aggroOnePVE, "Aggro closest non-player to cursor", "Will try to aggro (or switch target to) one non-player target closest to cursor"),
     AGGRO_ONE_PVP(Actions::aggroOnePVP, "Aggro closest player to cursor", "Will try to aggro (or switch target to) one player closest to cursor"),
     AGGRO_ALL(Actions::aggroAll, "Aggro all creatures near player", "Will try to aggro all creatures near player that are not in party"),
+    PARTY_PING_COMBAT_TARGET(Actions::pingCombatTarget, "Party ping combat target", "Sends the current combat target to party chat as a hidden ping marker."),
+    PARTY_PRIORITY_COMBAT_TARGET(Actions::priorityCombatTarget, "Party priority combat target", "Sends the current combat target to party chat as a longer priority marker."),
     COMBAT_DISTANCE_TOOL(GameUI::toggleCombatDistanceTool, "Combat Distancing Tool", "Open a window that shows the current distance to your combat target and can auto-move you to the perfect distance for the animal/player."),
     COMBAT_DISTANCE_AUTO(gui -> new haven.bot.CombatDistancerLite(gui).run(), "Auto-distance combat target", "One-shot: move to the perfect distance for the current combat target."),
 

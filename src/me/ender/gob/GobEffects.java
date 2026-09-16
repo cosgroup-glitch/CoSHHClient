@@ -19,7 +19,11 @@ public class GobEffects {
     public GobEffects(UI ui) {this.ui = ui;}
     
     public void markGob(Gob gob) {
-	fxon(gob, tgtfx, 7);
+	markGob(gob, 7);
+    }
+
+    public void markGob(Gob gob, long duration) {
+	fxon(gob, tgtfx, duration);
     }
     
     public void markPoint(MCache.Grid grid, Coord off) {

@@ -9,6 +9,7 @@ public class DraggableWidget extends Widget {
     protected static final Color EDIT_ACTIVE = new Color(120, 220, 255, 255);
     protected static final Color EDIT_SNAP = new Color(255, 221, 64, 255);
     protected static final Color EDIT_PRECISION = new Color(255, 148, 32, 255);
+    private static final Coord EYE_SZ = UI.scale(18, 14);
     
     private final String name;
     private UI.Grab dm;
@@ -16,6 +17,7 @@ public class DraggableWidget extends Widget {
     protected WidgetCfg cfg;
     private boolean draggable = true;
     private boolean customPosition = false;
+    private boolean contentsVisible = true;
     
     public DraggableWidget(String name) {
 	this.name = name;
@@ -29,6 +31,8 @@ public class DraggableWidget extends Widget {
     public boolean draggable() {return draggable;}
 
     public boolean hasCustomPosition() {return customPosition;}
+
+    public boolean contentsVisible() {return contentsVisible;}
 
     public static boolean guiEditMode() {return !CFG.GUI_LOCK.get();}
 
@@ -83,6 +87,40 @@ public class DraggableWidget extends Widget {
 	return canEditMove() && c.isect(moveHandleCoord(), moveHandleSize());
     }
 
+    protected Coord eyeCoord() {
+	return Coord.of(Math.max(0, sz.x - EYE_SZ.x - UI.scale(3)), UI.scale(3));
+    }
+
+    protected boolean hitEye(Coord c) {
+	return guiEditMode() && c.isect(eyeCoord(), EYE_SZ);
+    }
+
+    private void toggleContentsVisible() {
+	contentsVisible = !contentsVisible;
+	updateCfg();
+    }
+
+    private void drawEye(GOut g) {
+	Coord ec = eyeCoord();
+	Coord cen = ec.add(EYE_SZ.div(2));
+	g.chcolor(12, 16, 10, 225);
+	g.frect(ec, EYE_SZ);
+	g.chcolor(EDIT_LINE);
+	g.line(ec, ec.add(EYE_SZ.x - 1, 0), 1);
+	g.line(ec, ec.add(0, EYE_SZ.y - 1), 1);
+	g.line(ec.add(EYE_SZ.x - 1, 0), ec.add(EYE_SZ.x - 1, EYE_SZ.y - 1), 1);
+	g.line(ec.add(0, EYE_SZ.y - 1), ec.add(EYE_SZ.x - 1, EYE_SZ.y - 1), 1);
+	g.line(ec.add(UI.scale(3), EYE_SZ.y / 2), cen, 1);
+	g.line(cen, ec.add(EYE_SZ.x - UI.scale(3), EYE_SZ.y / 2), 1);
+	g.chcolor(contentsVisible ? EDIT_ACTIVE : EDIT_PRECISION);
+	g.fellipse(cen, UI.scale(3, 3));
+	if(!contentsVisible) {
+	    g.chcolor(255, 148, 32, 255);
+	    g.line(ec.add(UI.scale(3), EYE_SZ.y - UI.scale(3)), ec.add(EYE_SZ.x - UI.scale(3), UI.scale(3)), 1);
+	}
+	g.chcolor();
+    }
+
     protected void drawEditOverlay(GOut g) {
 	if(!guiEditMode() || !visible)
 	    return;
@@ -107,16 +145,23 @@ public class DraggableWidget extends Widget {
 	Tex tdim = Text.renderstroked(String.format("%dpx by %dpx", sz.x, sz.y), DFND).tex();
 	g.aimage(tdim, sz.div(2), 0.5, 0.5);
 	g.chcolor();
+	drawEye(g);
     }
 
     @Override
     public void draw(GOut g) {
-	super.draw(g);
+	if(contentsVisible)
+	    super.draw(g);
 	drawEditOverlay(g);
     }
     
     @Override
     public boolean mousedown(MouseDownEvent ev) {
+	if((ev.b == 1) && hitEye(ev.c)) {
+	    toggleContentsVisible();
+	    parent.setfocus(this);
+	    return true;
+	}
 	if(hitmove(ev.c)) {
 	    if(ev.b == 1) {
 		dm = ui.grabmouse(this);
@@ -125,6 +170,8 @@ public class DraggableWidget extends Widget {
 	    parent.setfocus(this);
 	    return true;
 	}
+	if(!contentsVisible)
+	    return false;
 	if(ev.propagate(this)) {
 	    parent.setfocus(this);
 	    return true;
@@ -158,6 +205,7 @@ public class DraggableWidget extends Widget {
     protected void initCfg() {
 	cfg = WidgetCfg.get(name);
 	customPosition = (cfg != null) && cfg.getValue("custom-position", false);
+	contentsVisible = (cfg == null) || cfg.getValue("contents-visible", true);
 	if(cfg != null) {
 	    c = cfg.c == null ? c : cfg.c;
 	    sz = cfg.sz == null ? sz : cfg.sz;
@@ -178,6 +226,7 @@ public class DraggableWidget extends Widget {
 	cfg.c = c;
 	cfg.sz = sz;
 	cfg.setValue("custom-position", customPosition);
+	cfg.setValue("contents-visible", contentsVisible);
     }
     
     protected void storeCfg() {

@@ -131,6 +131,20 @@ public class CustomOptPanels {
 	y += STEP;
 	panel.add(new CFGBox("Allow dragging combat UI", CFG.DRAG_COMBAT_UI, "Drag by cooldown circle"), x, y);
 	y += STEP;
+	panel.add(new CFGBox("Show combat UI even when not in combat", CFG.KEEP_COMBAT_UI_AFTER_COMBAT), x, y);
+	y += STEP;
+	Label inactiveScale = panel.add(new Label(String.format("Out of combat combat UI scale: %d%%", CFG.COMBAT_UI_INACTIVE_SCALE.get())), x + H_STEP, y);
+	y += UI.scale(15);
+	panel.add(new CFGSlider(UI.scale(150), 1, 100, CFG.COMBAT_UI_INACTIVE_SCALE, inactiveScale, "Out of combat combat UI scale: %d%%"), x + H_STEP, y);
+	y += STEP;
+	Label openingDecay = panel.add(new Label(String.format("Out of combat opening recovery: %.1f%%/s", CFG.COMBAT_UI_OPENING_DECAY.get() / 10.0)), x + H_STEP, y);
+	y += UI.scale(15);
+	panel.add(new CFGSlider(UI.scale(150), 0, 50, CFG.COMBAT_UI_OPENING_DECAY, openingDecay, "") {
+	    protected void updateLabel() {
+		label.settext(String.format("Out of combat opening recovery: %.1f%%/s", val / 10.0));
+	    }
+	}, x + H_STEP, y);
+	y += STEP;
 	panel.add(new Button(UI.scale(150), "Reset combat UI position", false), x + H_STEP, y)
 	    .action(() -> Fightsess.resetOffset(wnd.ui));
 	y += STEP;
@@ -149,6 +163,17 @@ public class CustomOptPanels {
 
 	y += STEP;
 	panel.add(new CFGBox("Always mark current target", CFG.ALWAYS_MARK_COMBAT_TARGET , "Usually current target only marked when there's more than one"), x, y);
+
+	y += STEP;
+	Label markerRadius = panel.add(new Label(String.format("Combat marker radius: %d", CFG.COMBAT_MARKER_RADIUS.get())), x + H_STEP, y);
+	y += UI.scale(15);
+	panel.add(new CFGSlider(UI.scale(150), 3, 12, CFG.COMBAT_MARKER_RADIUS, markerRadius, "Combat marker radius: %d") {
+	    public void changed() {
+		super.changed();
+		if(wnd.ui != null && wnd.ui.sess != null && wnd.ui.sess.glob != null)
+		    wnd.ui.sess.glob.oc.gobAction(Gob::markerUpdated);
+	    }
+	}, x + H_STEP, y);
 	
 	y = AddCombatHighlight(panel, x, y, "Highlight party members in combat", CFG.HIGHLIGHT_PARTY_IN_COMBAT, CFG.MARK_PARTY_IN_COMBAT);
 	y = AddCombatHighlight(panel, x, y, "Highlight self in combat", CFG.HIGHLIGHT_SELF_IN_COMBAT, CFG.MARK_SELF_IN_COMBAT);
@@ -168,6 +193,18 @@ public class CustomOptPanels {
 	panel.add(new CFGSlider(UI.scale(150), 1, 35, CFG.SHOW_COMBAT_INFO_HEIGHT, label, "Combat info vertical offset: %d"), x + H_STEP, y);
 	
 	y += STEP;
+	panel.add(new CFGBox("Show attack range", CFG.SHOW_ATTACK_RANGE, "Displays equipped weapon range and current target distance in the combat UI."), x, y);
+
+	y += STEP;
+	panel.add(refreshGobMarkers(new CFGBox("Range circle: Self", CFG.SHOW_ATTACK_RANGE_SELF)), x + H_STEP, y);
+	
+	y += STEP;
+	panel.add(refreshGobMarkers(new CFGBox("Range circle: Party", CFG.SHOW_ATTACK_RANGE_PARTY)), x + H_STEP, y);
+	
+	y += STEP;
+	panel.add(refreshGobMarkers(new CFGBox("Range circle: Enemies", CFG.SHOW_ATTACK_RANGE_ENEMY)), x + H_STEP, y);
+	
+	y += STEP;
 	panel.add(new CFGBox("Simplified combat openings", CFG.SIMPLE_COMBAT_OPENINGS, "Show openings as solid colors with numbers"), x, y);
 	
 	y += STEP;
@@ -184,6 +221,17 @@ public class CustomOptPanels {
 	
 	y += STEP;
 	panel.add(new CFGBox("Clear all damage after combat", CFG.CLEAR_ALL_DMG_AFTER_COMBAT), x, y);
+
+	y += STEP;
+	panel.add(autoReducerStartButton(UI.scale(200)), x, y);
+
+	y += STEP;
+	panel.add(new Button(UI.scale(200), "Guarded skills...", false)
+	    .action(() -> GuardedCombatSkills.openSettings(wnd.ui)), x, y);
+
+	y += STEP;
+	panel.add(new Button(UI.scale(200), "Combat debug...", false)
+	    .action(() -> openCombatDebug(wnd.ui)), x, y);
 	
 	y += STEP;
 	panel.add(new CFGBox("Show draggable HP/Stamina/Energy bars", CFG.SHOW_FLOATING_STAT_WDGS), x, y);
@@ -211,6 +259,52 @@ public class CustomOptPanels {
 	panel.add(new CFGBox("By ring", mark), x + H_STEP, y);
 	
 	return y;
+    }
+
+    private static CFGBox refreshGobMarkers(CFGBox box) {
+	box.set = value -> {
+	    if(box.ui != null && box.ui.sess != null && box.ui.sess.glob != null)
+		box.ui.sess.glob.oc.gobAction(Gob::markerUpdated);
+	};
+	return box;
+    }
+
+    private static Button autoReducerStartButton(int w) {
+	Button btn = new Button(w, autoReducerStartLabel(), false) {
+	    public void click() {
+		CombatReducerMode mode = CFG.AUTO_COMBAT_REDUCER_START.get();
+		CFG.AUTO_COMBAT_REDUCER_START.set(mode == CombatReducerMode.OFF ? CombatReducerMode.SEMI :
+		    mode == CombatReducerMode.SEMI ? CombatReducerMode.ON : CombatReducerMode.OFF);
+		change(autoReducerStartLabel());
+	    }
+	};
+	btn.settip("Starting state for Auto combat reducer when combat begins.");
+	return btn;
+    }
+
+    private static String autoReducerStartLabel() {
+	return "Auto reducer start: " + CFG.AUTO_COMBAT_REDUCER_START.get().label;
+    }
+
+    private static void openCombatDebug(UI ui) {
+	if(ui == null || ui.gui == null)
+	    return;
+	ui.gui.add(new CombatDebugWindow(), ui.mc);
+    }
+
+    private static class CombatDebugWindow extends Window {
+	CombatDebugWindow() {
+	    super(UI.scale(new Coord(280, 105)), "Combat Debug");
+	    justclose = true;
+	    int y = UI.scale(8);
+	    add(new Label("Debug options"), UI.scale(8), y);
+	    y += STEP;
+	    add(new CFGBox("Measure opening recovery", CFG.COMBAT_DEBUG_OPENING_RECOVERY,
+		"Reports measured opening recovery after combat resumes from a saved out-of-combat sample."), UI.scale(10), y);
+	    y += STEP + UI.scale(8);
+	    Button close = add(new Button(UI.scale(80), "Close", false), UI.scale(10), y);
+	    close.action(this::reqdestroy);
+	}
     }
 
     private static class GUILockButton extends Button implements CFG.Observer<Boolean> {

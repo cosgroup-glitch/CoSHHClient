@@ -46,6 +46,10 @@ public class Buff extends Widget implements ItemInfo.ResOwner, Bufflist.Managed 
 //	put("paginae/atk/guard", new Color(64, 64, 64));
     }};
     
+    public static Color openingColor(String name) {
+	return(OPENINGS.get(name));
+    }
+    
     public static final Text.Foundry nfnd = new Text.Foundry(Text.dfont.deriveFont(Font.BOLD), 12);
     public static final Tex frame = Resource.loadtex("gfx/hud/buffs/frame");
     public static final Tex cframe = Resource.loadtex("gfx/hud/buffs/cframe");

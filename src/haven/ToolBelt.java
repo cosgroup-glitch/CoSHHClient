@@ -152,6 +152,10 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     
     @Override
     public void draw(GOut g) {
+	if(!contentsVisible()) {
+	    drawEditOverlay(g);
+	    return;
+	}
 	if(over) {
 	    if(!locked && guiEditMode()) {
 		g.chcolor(BG_COLOR);
@@ -215,6 +219,8 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     
     @Override
     public boolean mousedown(MouseDownEvent ev) {
+	if(!contentsVisible())
+	    return super.mousedown(ev);
 	if(guiEditMode() && hitmove(ev.c))
 	    return super.mousedown(ev);
 	//TODO: Make actions draggable if not locked
@@ -238,6 +244,8 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     
     @Override
     public Object tooltip(Coord c, Widget prev) {
+	if(!contentsVisible())
+	    return super.tooltip(c, prev);
 	int slot = beltslot(c);
 	if(slot < 0) {return super.tooltip(c, prev);}
 	GameUI.BeltSlot item = belt(slot);
@@ -262,6 +270,8 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     }
     
     public boolean drop(Coord c, Coord ul) {
+	if(!contentsVisible())
+	    return false;
 	int slot = beltslot(c);
 	if(slot != -1) {
 	    ui.gui.wdgmsg("setbelt", slot, 0);
@@ -273,6 +283,8 @@ public class ToolBelt extends DraggableWidget implements DTarget, DropTarget {
     public boolean iteminteract(Coord c, Coord ul) {return false;}
     
     public boolean dropthing(Coord c, Object thing) {
+	if(!contentsVisible())
+	    return false;
 	int slot = beltslot(c);
 	if(slot != -1) {
 	    if(thing instanceof MenuGrid.Pagina) {

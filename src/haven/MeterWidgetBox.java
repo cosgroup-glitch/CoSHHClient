@@ -20,7 +20,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
     private static final Pattern NUMBERS = Pattern.compile("(\\d+)");
     
     public final IMeter meter;
-    private final String metername;
+    private String metername;
 
     public MeterWidgetBox(String name, IMeter meter) {
 	super("MeterWidgetBox:" + name, UI.scale(60, 14));
@@ -28,6 +28,22 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 	this.meter = add(meter, Coord.z);
 	meter.hide();
 	resize(meter.sz);
+    }
+
+    private String metername() {
+	if(!isKnownMeter(metername)) {
+	    try {
+		Resource res = meter.bg.get();
+		if(res != null)
+		    metername = res.basename();
+	    } catch(Loading l) {
+	    }
+	}
+	return metername;
+    }
+
+    private static boolean isKnownMeter(String name) {
+	return name.equals("hp") || name.equals("stam") || name.equals("nrj");
     }
 
     @Override
@@ -52,12 +68,14 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 
     @Override
     public void draw(GOut g) {
-	drawmeter(g);
+	if(contentsVisible())
+	    drawmeter(g);
 	drawEditOverlay(g);
 	drawresize(g);
     }
     
     private void drawmeter(GOut g) {
+	String metername = metername();
 	if(metername.equals("hp")) {
 	    drawhp(g);
 	} else if(metername.equals("stam")) {
@@ -153,7 +171,7 @@ public class MeterWidgetBox extends ResizableDraggableWidget {
 
     @Override
     public Object tooltip(Coord c, Widget prev) {
-	if(metername.equals("nrj"))
+	if(metername().equals("nrj"))
 	    return RichText.render("$b{Fullness meter}\nAbove 8000% for healing, below 2000% starving.", UI.scale(240));
 	return super.tooltip(c, prev);
     }

@@ -31,7 +31,11 @@ import java.util.function.*;
 import java.io.*;
 import java.nio.file.*;
 import java.nio.channels.*;
+import java.net.URI;
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.awt.image.*;
 import haven.render.*;
@@ -72,6 +76,20 @@ public class MapWnd extends WindowX implements Console.Directory {
     private Marker mrefocus = null;
     private int olalpha = 64;
     protected final Collection<Runnable> deferred = new LinkedList<>();
+
+    private static BufferedImage browserbtn(Color bg, Color fg) {
+	Coord sz = UI.scale(20, 20);
+	BufferedImage img = TexI.mkbuf(sz);
+	Graphics g = img.getGraphics();
+	g.setColor(bg);
+	g.fillRect(0, 0, sz.x, sz.y);
+	g.setColor(new Color(255, 255, 255, 90));
+	g.drawRect(0, 0, sz.x - 1, sz.y - 1);
+	BufferedImage text = Text.renderstroked("W", fg, Color.BLACK, new Text.Foundry(Text.sansbold.deriveFont(UI.scale(12f)))).img;
+	g.drawImage(text, (sz.x - text.getWidth()) / 2, (sz.y - text.getHeight()) / 2, null);
+	g.dispose();
+	return(img);
+    }
 
     private final static Predicate<Marker> pmarkers = (m -> m instanceof PMarker);
     private final static Predicate<Marker> smarkers = (m -> m instanceof SMarker);
@@ -165,6 +183,14 @@ public class MapWnd extends WindowX implements Console.Directory {
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/pointer", "", "-d", "-h"), btn.pos("ur"))
 	    .state(CFG.MMAP_POINTER::get).set(CFG.MMAP_POINTER::set).settip("Display pointers");
 
+	btn = topbar.add(new IButton(browserbtn(new Color(38, 80, 110, 255), Color.WHITE),
+				     browserbtn(new Color(22, 48, 70, 255), Color.LIGHT_GRAY),
+				     browserbtn(new Color(54, 112, 150, 255), Color.YELLOW)) {
+		public void click() {
+		    openBrowserMap();
+		}
+	    }, btn.pos("ur")).settip("Open browser map");
+
 	btn = topbar.add(new IButton("gfx/hud/mmap/pointer", "", "-d", "-h") {
 		{
 		    recthit = true;
@@ -241,17 +267,19 @@ public class MapWnd extends WindowX implements Console.Directory {
 	mv.basic.add(mvmarks);
     }
 
+    @Override
+    public void remove() {
+	BrowserMapServer.close(this);
+	super.remove();
+	mvmarks.remove();
+    }
+
     public boolean compactLocked() {
 	return compact() && CFG.MAP_COMPACT_LOCKED.get();
     }
 
     public void toggleCompactLock() {
 	CFG.MAP_COMPACT_LOCKED.set(!CFG.MAP_COMPACT_LOCKED.get());
-    }
-
-    public void remove() {
-	super.remove();
-	mvmarks.remove();
     }
 
     public void toggleol(String tag, boolean a) {
@@ -275,6 +303,228 @@ public class MapWnd extends WindowX implements Console.Directory {
     private void syncClaimOverlays() {
 	setClaimOverlay("cplot", CFG.MMAP_CLAIM, CFG.MMAP_CLAIM.get());
 	setClaimOverlay("vlg", CFG.MMAP_VILLAGE, CFG.MMAP_VILLAGE.get());
+    }
+
+    private void openBrowserMap() {
+	try {
+	    URI uri = BrowserMapServer.open(this);
+	    ui.wnd.toolkit().browse(uri);
+	    GameUI gui = getparent(GameUI.class);
+	    if(gui != null)
+		gui.msg("Browser map opened at " + uri, GameUI.MsgType.INFO);
+	} catch(Exception e) {
+	    e.printStackTrace(Debug.log);
+	    GameUI gui = getparent(GameUI.class);
+	    if(gui != null)
+		gui.error("Could not open browser map.");
+	}
+    }
+
+    public BufferedImage browserTile(long segid, int lvl, Coord sc) {
+	return(browserGridImage(segid, lvl, sc, null));
+    }
+
+    public BufferedImage browserOverlayTile(long segid, int lvl, Coord sc, String tag) {
+	return(browserGridImage(segid, lvl, sc, tag));
+    }
+
+    private BufferedImage browserGridImage(long segid, int lvl, Coord sc, String overlay) {
+	try(Locked lk = new Locked(file.lock.readLock())) {
+	    MapFile.Segment seg = file.segments.get(segid);
+	    if(seg == null)
+		throw(new Loading("No map segment."));
+	    MapFile.DataGrid grid = seg.grid(lvl, sc.mul(1 << lvl)).get();
+	    if(grid == null)
+		throw(new Loading("No map grid."));
+	    if(overlay != null) {
+		if("heightmap".equals(overlay))
+		    return(grid.heightrender(sc.mul(cmaps), overlay));
+		return(grid.olrender(sc.mul(cmaps), overlay));
+	    }
+	    if(grid instanceof MapFile.ZoomGrid)
+		return(grid.render(sc.mul(cmaps)));
+	    MapFile.View snap = new MapFile.View(seg);
+	    for(int y = -1; y <= 1; y++) {
+		for(int x = -1; x <= 1; x++)
+		    snap.addgrid(sc.add(x, y));
+	    }
+	    snap.fin();
+	    return(MapSource.drawmap(snap, Area.sized(sc.mul(cmaps), cmaps)));
+	}
+    }
+
+    public String browserStateJson() {
+	MiniMap.Location loc = (view.dloc != null) ? view.dloc : view.curloc;
+	if(loc == null)
+	    throw(new Loading("No map location yet."));
+	StringBuilder buf = new StringBuilder(4096);
+	buf.append("{\"seg\":\"").append(Long.toUnsignedString(loc.seg.id)).append("\",");
+	buf.append("\"x\":").append(loc.tc.x).append(",\"y\":").append(loc.tc.y).append(",");
+	buf.append("\"tile\":").append(cmaps.x).append(",");
+	buf.append("\"view\":").append(MiniMap.VIEW_SZ.x).append(",");
+	buf.append("\"markers\":[");
+	boolean first = true;
+	try(Locked lk = new Locked(file.lock.readLock())) {
+	    for(Marker mark : file.markers) {
+		if((mark.seg != loc.seg.id) || markcfg.filter(mark))
+		    continue;
+		if(!first)
+		    buf.append(',');
+		first = false;
+		buf.append("{\"x\":").append(mark.tc.x).append(",\"y\":").append(mark.tc.y).append(",");
+		buf.append("\"id\":").append(markerImageId(mark)).append(",");
+		buf.append("\"name\":");
+		json(buf, mark.nm);
+		buf.append(",\"type\":\"").append(mark instanceof MapFile.PMarker ? "placed" : "natural").append("\",");
+		buf.append("\"color\":\"").append(markcolor(mark)).append("\"}");
+	    }
+	}
+	buf.append("],\"player\":");
+	MiniMap.Location sessloc = view.sessloc;
+	Gob pl = (mv == null) ? null : mv.player();
+	if((pl == null) || (sessloc == null) || (sessloc.seg.id != loc.seg.id)) {
+	    buf.append("null");
+	} else {
+	    Coord ptc = pl.rc.floor(tilesz).add(sessloc.tc);
+	    buf.append("{\"x\":").append(ptc.x).append(",\"y\":").append(ptc.y).append("}");
+	}
+	buf.append(",\"icons\":[");
+	first = true;
+	if((sessloc != null) && (sessloc.seg.id == loc.seg.id)) {
+	    for(MiniMap.DisplayIcon icon : view.icons) {
+		if((icon.rc == null) || view.filter(icon))
+		    continue;
+		Coord tc = icon.rc.floor(tilesz).add(sessloc.tc);
+		if(!first)
+		    buf.append(',');
+		first = false;
+		buf.append("{\"x\":").append(tc.x).append(",\"y\":").append(tc.y).append(",");
+		buf.append("\"id\":").append(icon.gob.id).append(",");
+		buf.append("\"name\":");
+		json(buf, icon.icon.name());
+		buf.append(",\"color\":\"#d8e8ff\"}");
+	    }
+	}
+	buf.append("],\"party\":[");
+	first = true;
+	if((sessloc != null) && (sessloc.seg.id == loc.seg.id) && (ui != null) && (ui.sess != null)) {
+	    for(Party.Member member : ui.sess.glob.party.memb.values()) {
+		Coord2d pc = member.getc();
+		if(pc == null)
+		    continue;
+		Coord tc = pc.floor(tilesz).add(sessloc.tc);
+		if(!first)
+		    buf.append(',');
+		first = false;
+		Color col = member.col;
+		buf.append("{\"x\":").append(tc.x).append(",\"y\":").append(tc.y).append(",");
+		buf.append("\"color\":\"").append(String.format("#%02x%02x%02x", col.getRed(), col.getGreen(), col.getBlue())).append("\"}");
+	    }
+	}
+	buf.append(']');
+	buf.append('}');
+	return(buf.toString());
+    }
+
+    private int markerImageId(Marker marker) {
+	int i = 0;
+	for(Marker mark : file.markers) {
+	    if(mark == marker)
+		return(i);
+	    i++;
+	}
+	return(-1);
+    }
+
+    public BufferedImage browserMarkerImage(int id) {
+	Marker mark;
+	try(Locked lk = new Locked(file.lock.readLock())) {
+	    if((id < 0) || (id >= file.markers.size()))
+		throw(new IllegalArgumentException("marker"));
+	    mark = new ArrayList<>(file.markers).get(id);
+	}
+	return(markerImage(mark));
+    }
+
+    private BufferedImage markerImage(Marker mark) {
+	if(mark instanceof MapFile.PMarker) {
+	    BufferedImage fg = PMarker.flagfg.img;
+	    BufferedImage bg = PMarker.flagbg.img;
+	    Coord sz = Coord.of(Math.max(fg.getWidth(), bg.getWidth()), Math.max(fg.getHeight(), bg.getHeight()));
+	    BufferedImage img = TexI.mkbuf(sz);
+	    Graphics2D g = img.createGraphics();
+	    BufferedImage col = TexI.mkbuf(Coord.of(fg.getWidth(), fg.getHeight()));
+	    Graphics2D cg = col.createGraphics();
+	    cg.drawImage(fg, 0, 0, null);
+	    cg.setComposite(AlphaComposite.SrcIn);
+	    cg.setColor(((MapFile.PMarker)mark).color);
+	    cg.fillRect(0, 0, fg.getWidth(), fg.getHeight());
+	    cg.dispose();
+	    g.drawImage(col, 0, 0, null);
+	    g.drawImage(bg, 0, 0, null);
+	    g.dispose();
+	    return(fitBrowserAsset(img));
+	} else if(mark instanceof MapFile.SMarker) {
+	    Resource res = ((MapFile.SMarker)mark).res.get();
+	    Resource.Image img = res.flayer(Resource.imgc);
+	    if(img != null)
+		return(fitBrowserAsset(img.scaled()));
+	} else if(mark instanceof CustomMarker) {
+	    CustomMarker cm = (CustomMarker)mark;
+	    CustomMarker.Image img = CustomMarker.image(cm.res, cm.color);
+	    if((img != null) && (img.tex instanceof TexI))
+		return(fitBrowserAsset(((TexI)img.tex).back));
+	}
+	throw(new Loading("No marker image."));
+    }
+
+    public BufferedImage browserIconImage(long gobid) {
+	for(MiniMap.DisplayIcon icon : view.icons) {
+	    if(icon.gob.id == gobid)
+		return(fitBrowserAsset(icon.icon.image()));
+	}
+	throw(new Loading("No map icon."));
+    }
+
+    private static BufferedImage fitBrowserAsset(BufferedImage img) {
+	int max = UI.scale(24);
+	int w = img.getWidth(), h = img.getHeight();
+	if((w <= max) && (h <= max))
+	    return(img);
+	double f = Math.min((double)max / w, (double)max / h);
+	Coord sz = Coord.of(Math.max(1, (int)Math.round(w * f)), Math.max(1, (int)Math.round(h * f)));
+	BufferedImage ret = TexI.mkbuf(sz);
+	Graphics2D g = ret.createGraphics();
+	g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+	g.drawImage(img, 0, 0, sz.x, sz.y, null);
+	g.dispose();
+	return(ret);
+    }
+
+    private static String markcolor(Marker mark) {
+	Color col = (mark instanceof MapFile.PMarker) ? ((MapFile.PMarker)mark).color : Color.WHITE;
+	return(String.format("#%02x%02x%02x", col.getRed(), col.getGreen(), col.getBlue()));
+    }
+
+    private static void json(StringBuilder buf, String text) {
+	buf.append('"');
+	for(int i = 0; i < text.length(); i++) {
+	    char c = text.charAt(i);
+	    if((c == '"') || (c == '\\')) {
+		buf.append('\\').append(c);
+	    } else if(c == '\n') {
+		buf.append("\\n");
+	    } else if(c == '\r') {
+		buf.append("\\r");
+	    } else if(c == '\t') {
+		buf.append("\\t");
+	    } else if(c < 0x20) {
+		buf.append(String.format("\\u%04x", (int)c));
+	    } else {
+		buf.append(c);
+	    }
+	}
+	buf.append('"');
     }
 
     private class ViewFrame extends Frame {
@@ -614,11 +864,14 @@ public class MapWnd extends WindowX implements Console.Directory {
 		int markerseq = view.file.markerseq;
 		if(view.file.lock.readLock().tryLock()) {
 		    try {
-			Map<Marker, ListMarker> prev = new HashMap<>();
+			Map<Marker, ListMarker> prev = new IdentityHashMap<>();
 			for(ListMarker pm : this.markers)
 			    prev.put(pm.mark, pm);
+			Set<Marker> seen = Collections.newSetFromMap(new IdentityHashMap<Marker, Boolean>());
 			List<ListMarker> markers = new ArrayList<>();
 			for(Marker mark : view.file.markers) {
+			    if(!seen.add(mark))
+				continue;
 			    if(!mflt.test(mark))
 				continue;
 			    ListMarker lm = prev.get(mark);
@@ -631,6 +884,8 @@ public class MapWnd extends WindowX implements Console.Directory {
 			markers.sort(mcmp);
 			this.markers = markers;
 			this.markerseq = markerseq;
+			tool.list.reset();
+			tool.list.research();
 		    } finally {
 			view.file.lock.readLock().unlock();
 		    }

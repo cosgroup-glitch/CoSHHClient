@@ -1,6 +1,7 @@
 package auto;
 
 import haven.*;
+import me.ender.ChatCommands;
 import me.ender.ClientUtils;
 import me.ender.ItemHelpers;
 
@@ -235,6 +236,31 @@ public class Actions {
     
     public static void aggroAll(GameUI gui) {
 	aggro(gui, getNearest(gui, Integer.MAX_VALUE, 165, gobIs(GobTag.PLAYER), gobIs(GobTag.AGGRO_TARGET), GobHelper::isNotFriendlySteed));
+    }
+
+    public static void pingCombatTarget(GameUI gui) {
+	Gob target = combatTarget(gui);
+	if(target == null) {
+	    gui.error("No combat target to ping");
+	    return;
+	}
+	ChatCommands.sendPartyGobHighlight(gui.ui, target.id);
+    }
+
+    public static void priorityCombatTarget(GameUI gui) {
+	Gob target = combatTarget(gui);
+	if(target == null) {
+	    gui.error("No combat target to mark");
+	    return;
+	}
+	ChatCommands.sendPartyPriorityTarget(gui.ui, target.id);
+    }
+
+    private static Gob combatTarget(GameUI gui) {
+	if(gui.fv == null || gui.fv.current == null || gui.map == null) {
+	    return null;
+	}
+	return gui.map.glob.oc.getgob(gui.fv.current.gobid);
     }
     
     public static void reAggroKritter(GameUI gui, long gobId) {

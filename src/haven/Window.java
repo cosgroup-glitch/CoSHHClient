@@ -287,10 +287,13 @@ public class Window extends Widget {
     }
 
     private static class DebugPanel extends WindowX {
+	private static final int LOG_LINE_LIMIT = 250;
 	private final Window target;
 	private final Textlog log;
 	private final StringBuilder report = new StringBuilder();
 	private int eventseq = 0;
+	private int loggedLines = 0;
+	private boolean logLimited = false;
 
 	DebugPanel(Window target, String initial) {
 	    super(UI.scale(620, 420), "Window Debug");
@@ -298,8 +301,8 @@ public class Window extends Widget {
 	    justclose = true;
 	    Button copy = add(new Button(UI.scale(84), "Copy", this::copy), Coord.z);
 	    log = add(new Textlog(Coord.of(csz().x, csz().y - copy.sz.y - UI.scale(5))), Coord.of(0, copy.sz.y + UI.scale(5)));
-	    log.maxLines = 0;
-	    append(initial);
+	    log.maxLines = LOG_LINE_LIMIT + 1;
+	    appendBlock(initial);
 	    append("");
 	    append("Live tracking is active for: " + target.getClass().getName() + " caption=" + target.caption());
 	    pack();
@@ -307,7 +310,13 @@ public class Window extends Widget {
 
 	private void append(String line) {
 	    report.append(line).append('\n');
-	    log.append(line);
+	    if(loggedLines < LOG_LINE_LIMIT) {
+		log.append(line);
+		loggedLines++;
+	    } else if(!logLimited) {
+		log.append("Debug preview truncated. Full report was copied to clipboard; press Copy for live updates.");
+		logLimited = true;
+	    }
 	}
 
 	private void appendBlock(String block) {

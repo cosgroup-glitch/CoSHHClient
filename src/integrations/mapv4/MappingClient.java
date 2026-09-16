@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
  * @author Vendan
  */
 public class MappingClient {
+    private static final int MARKER_UPLOAD_BATCH_SIZE = 100;
+    private static final int MARKER_UPLOAD_READ_TIMEOUT_MS = 60000;
     
     private ExecutorService gridsUploader = Executors.newSingleThreadExecutor();
     private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(3);
@@ -552,27 +554,38 @@ public class MappingClient {
 	public void run() {
 	    if(dead())
 		return;
-	    uploadRange(from, to);
+	    int uploaded = 0, failed = 0;
+	    for(int start = from; start < to; start += MARKER_UPLOAD_BATCH_SIZE) {
+		int end = Math.min(start + MARKER_UPLOAD_BATCH_SIZE, to);
+		if(uploadRange(start, end))
+		    uploaded += end - start;
+		else
+		    failed += end - start;
+	    }
+	    if(failed > 0)
+		warn(String.format("Marker upload incomplete: %d markers accepted, %d failed.", uploaded, failed));
+	    else
+		log("marker upload complete: %d markers accepted", uploaded);
 	}
 
-	private void uploadRange(int from, int to) {
+	private boolean uploadRange(int from, int to) {
 	    if(dead() || (from >= to))
-		return;
+		return true;
 
 	    JSONArray data = new JSONArray(markers.subList(from, to).toArray());
 	    if(upload(data))
-		return;
+		return true;
 
 	    if(data.length() == 1) {
-		log("marker %d/%d skipped after upload failure: %s", from + 1, markers.size(), markerdesc(markers.get(from)));
-		return;
+		warn(String.format("Marker %d/%d skipped after upload failure: %s",
+				   from + 1, markers.size(), markerdesc(markers.get(from))));
+		return false;
 	    }
 
 	    int mid = from + ((to - from) / 2);
 	    log("marker upload chunk %d-%d failed; retrying as %d-%d and %d-%d",
 		from + 1, to, from + 1, mid, mid + 1, to);
-	    uploadRange(from, mid);
-	    uploadRange(mid, to);
+	    return uploadRange(from, mid) & uploadRange(mid, to);
 	}
 
 	private boolean upload(JSONArray data) {
@@ -586,7 +599,7 @@ public class MappingClient {
 		connection.setRequestMethod("POST");
 		connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
 		connection.setConnectTimeout(15000);
-		connection.setReadTimeout(30000);
+		connection.setReadTimeout(MARKER_UPLOAD_READ_TIMEOUT_MS);
 		connection.setDoOutput(true);
 		try (DataOutputStream out = new DataOutputStream(connection.getOutputStream())) {
 		    out.write(json.getBytes(StandardCharsets.UTF_8));
@@ -598,8 +611,8 @@ public class MappingClient {
 		 * upload. Read the body too - that is where the server explains
 		 * itself. */
 		if(code < 200 || code >= 300) {
-		    warn(String.format("Marker upload rejected: HTTP %d %s after %dms",
-				       code, connection.getResponseMessage(), ms));
+		    log("marker upload rejected: HTTP %d %s after %dms",
+			code, connection.getResponseMessage(), ms);
 		    log("server said: %s", readbody(connection, true));
 		    return false;
 		} else {
@@ -607,8 +620,8 @@ public class MappingClient {
 		    return true;
 		}
 	    } catch (Exception ex) {
-		warn(String.format("Marker upload failed after %dms: %s",
-				   System.currentTimeMillis() - t0, ex));
+		log("marker upload attempt failed after %dms: %s",
+		    System.currentTimeMillis() - t0, ex);
 		ex.printStackTrace(System.out);
 		return false;
 	    } finally {

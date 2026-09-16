@@ -1,6 +1,9 @@
 /build
 /bin
 /dist
+/tmp
+/_default-client-debug
+/_hurricane-scan
 /local-config.properties
 /local-boot.properties
 /build.properties
@@ -28,3 +31,15 @@ out
 /accounts.json
 /windows.json
 /keybindings.json
+/config.json
+/food_data.json
+/charterbook.json
+/favourites.json
+/timers.json
+/world-*/
+/.workdir-migrated
+
+# Generated local/debug artifacts
+/string.png
+/resources/compiled
+/resources/classes

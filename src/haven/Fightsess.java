@@ -43,6 +43,9 @@ import static haven.KeyBinder.*;
 
 public class Fightsess extends Widget {
     private static final Coord off = new Coord(UI.scale(32), UI.scale(32));
+    private static final double SEMI_REDUCER_MIN_DISTANCE = 3.5;
+    private static final Coord INACTIVE_DRAGGER_BASE_SZ = UI.scale(new Coord(360, 180));
+    private static final Coord INACTIVE_DRAGGER_MIN_SZ = UI.scale(new Coord(120, 70));
     public static final Text.Foundry fnd = new Text.Foundry(Text.sans.deriveFont(Font.BOLD), 14);
     public static final Tex cdframe = Resource.loadtex("gfx/hud/combat/cool");
     public static final Tex actframe = Buff.frame;
@@ -66,13 +69,35 @@ public class Fightsess extends Widget {
 	new KeyBinder.KeyBind(KeyEvent.VK_4, SHIFT),
 	new KeyBinder.KeyBind(KeyEvent.VK_5, SHIFT),
     };
+    public static KeyBinder.KeyBind reducerKeybind = new KeyBinder.KeyBind(KeyEvent.VK_A, NONE);
+    public static KeyBinder.KeyBind targetClosestKeybind = new KeyBinder.KeyBind(KeyEvent.VK_S, NONE);
+    public static KeyBinder.KeyBind guardedSkillsKeybind = new KeyBinder.KeyBind(KeyEvent.VK_G, SHIFT);
     public final Action[] actions;
     public int use = -1, useb = -1;
     public Coord pcc;
     public int pho;
     private Fightview fv;
     private static final String DRAGGER = "Fightsess:drag";
-    private FakeDraggerWdg dragger = new FakeDraggerWdg(DRAGGER, CFG.DRAG_COMBAT_UI);
+    private FakeDraggerWdg dragger = new FakeDraggerWdg(DRAGGER, CFG.DRAG_COMBAT_UI) {
+	public boolean mousedown(MouseDownEvent ev) {
+	    if(super.mousedown(ev))
+		return(true);
+	    return(!active && DraggableWidget.guiEditMode() && ev.c.isect(Coord.z, sz));
+	}
+    };
+    private boolean active = true;
+    private boolean ended = false;
+    private boolean forcedestroy = false;
+    private boolean reportedDecay = false;
+    private CombatReducerMode reducerMode = CFG.AUTO_COMBAT_REDUCER_START.get();
+    private double reducerTimer = 0;
+    private QueuedGuardedSkill guardedSkill;
+    private final Collection<InactiveBuff> inactivebuffs = new ArrayList<>();
+    private static Collection<OpeningSample> lastOpeningSamples = Collections.emptyList();
+    private static final double MIN_MEASURED_OPENING_DECAY = 0.5;
+    private static final double MAX_MEASURED_OPENING_DECAY = 2.5;
+    private static final double INACTIVE_FADE_TIME = 1.0;
+    private double inactiveStart = 0;
 
     public static class Action {
 	public final Indir<Resource> res;
@@ -80,6 +105,63 @@ public class Fightsess extends Widget {
 
 	public Action(Indir<Resource> res) {
 	    this.res = res;
+	}
+    }
+    
+    private static class InactiveBuff {
+	final Indir<Resource> res;
+	final Coord relc;
+	final int ameter;
+	final double start;
+	final boolean enemy;
+	
+	InactiveBuff(Buff buff, Coord relc, boolean enemy) {
+	    this.res = buff.res;
+	    this.relc = relc;
+	    this.ameter = buff.ameter();
+	    this.start = Utils.rtime();
+	    this.enemy = enemy;
+	}
+	
+	int ameter() {
+	    if(ameter < 0)
+		return(-1);
+	    double elapsed = Utils.rtime() - start;
+	    return(Math.max(0, (int)Math.floor(ameter - (elapsed * openingDecayRate()))));
+	}
+	
+	double fadeStart() {
+	    double decay = openingDecayRate();
+	    if(enemy || (ameter <= 0) || (decay <= 0))
+		return(start);
+	    return(start + (ameter / decay));
+	}
+    }
+    
+    private static class OpeningSample {
+	final String side, resname;
+	final int value;
+	final double time;
+	
+	OpeningSample(String side, Buff buff, double time) {
+	    this.side = side;
+	    this.resname = buff.res.get().name;
+	    this.value = buff.ameter();
+	    this.time = time;
+	}
+	
+	String key() {
+	    return(side + ":" + resname);
+	}
+    }
+    
+    private static class OpeningMeasurement {
+	final String text;
+	final double rate;
+	
+	OpeningMeasurement(String text, double rate) {
+	    this.text = text;
+	    this.rate = rate;
 	}
     }
 
@@ -192,6 +274,186 @@ public class Fightsess extends Widget {
 		fx.spr.tick(dt);
 	    }
 	}
+	autoCombatReducer(dt);
+	releaseGuardedSkill();
+    }
+
+    private static final Map<String, String[]> REDUCERS = new HashMap<String, String[]>() {{
+	put(Buff.OPEN_RED, new String[]{"paginae/atk/flex", "paginae/atk/yieldground", "paginae/atk/zigzag", "paginae/atk/artevade"});
+	put(Buff.OPEN_YELLOW, new String[]{"paginae/atk/jump", "paginae/atk/regain", "paginae/atk/zigzag", "paginae/atk/artevade"});
+	put(Buff.OPEN_BLUE, new String[]{"paginae/atk/flex", "paginae/atk/sidestep", "paginae/atk/watchmoves", "paginae/atk/artevade"});
+	put(Buff.OPEN_GREEN, new String[]{"paginae/atk/fdodge", "paginae/atk/qdodge", "paginae/atk/regain", "paginae/atk/yieldground", "paginae/atk/artevade"});
+    }};
+
+    private static final String[] ANY_REDUCER = {
+	"paginae/atk/flex", "paginae/atk/yieldground", "paginae/atk/jump", "paginae/atk/regain",
+	"paginae/atk/sidestep", "paginae/atk/watchmoves", "paginae/atk/fdodge", "paginae/atk/qdodge",
+	"paginae/atk/zigzag", "paginae/atk/artevade"
+    };
+
+    private void autoCombatReducer(double dt) {
+	if(!active || fv == null || reducerMode == CombatReducerMode.OFF)
+	    return;
+	if(hasLoadedMove())
+	    return;
+	reducerTimer -= dt;
+	if(reducerTimer > 0)
+	    return;
+	reducerTimer = 0.35;
+	if(reducerMode == CombatReducerMode.SEMI && enemyTooCloseForSemiReducer())
+	    return;
+	OpeningState openings = ownOpenings();
+	if(openings.biggest == null)
+	    return;
+	int action = reducerAction(openings);
+	if(action >= 0)
+	    wdgmsg("use", action, 1, 0);
+    }
+
+    private OpeningState ownOpenings() {
+	OpeningState ret = new OpeningState();
+	for(Buff buff : fv.buffs.children(Buff.class)) {
+	    try {
+		String name = buff.res.get().name;
+		if(Buff.openingColor(name) == null)
+		    continue;
+		int value = buff.ameter();
+		if(value > 0)
+		    ret.put(name, value);
+	    } catch(Loading ignored) {}
+	}
+	return ret;
+    }
+
+    private int reducerAction(OpeningState openings) {
+	String[] prefs = reducerPrefs(openings);
+	int ret = actionIndex(withDashFallback(prefs, openings));
+	return ret >= 0 ? ret : actionIndex(ANY_REDUCER);
+    }
+
+    private String[] reducerPrefs(OpeningState openings) {
+	if(Buff.OPEN_YELLOW.equals(openings.biggest) && openings.value(Buff.OPEN_RED) > 0) {
+	    if(openings.value(Buff.OPEN_RED) >= 15)
+		return new String[]{"paginae/atk/zigzag", "paginae/atk/jump", "paginae/atk/regain", "paginae/atk/artevade"};
+	}
+	return REDUCERS.get(openings.biggest);
+    }
+
+    private String[] withDashFallback(String[] prefs, OpeningState openings) {
+	if(prefs == null || openings.count != 1)
+	    return prefs;
+	java.util.List<String> ret = new ArrayList<>();
+	for(String pref : prefs) {
+	    if("paginae/atk/artevade".equals(pref) && !ret.contains("paginae/atk/dash"))
+		ret.add("paginae/atk/dash");
+	    ret.add(pref);
+	}
+	if(!ret.contains("paginae/atk/dash"))
+	    ret.add("paginae/atk/dash");
+	return ret.toArray(new String[0]);
+    }
+
+    private static class OpeningState {
+	final Map<String, Integer> values = new HashMap<>();
+	String biggest = null;
+	int biggestv = 0;
+	int count = 0;
+
+	void put(String name, int value) {
+	    values.put(name, value);
+	    count++;
+	    if(value > biggestv) {
+		biggest = name;
+		biggestv = value;
+	    }
+	}
+
+	int value(String name) {
+	    return values.getOrDefault(name, 0);
+	}
+    }
+
+    private int actionIndex(String[] names) {
+	if(names == null)
+	    return -1;
+	double now = Utils.rtime();
+	for(String name : names) {
+	    for(int i = 0; i < actions.length; i++) {
+		Action act = actions[i];
+		if(act == null || now < act.ct)
+		    continue;
+		try {
+		    if(name.equals(act.res.get().name))
+			return i;
+		} catch(Loading ignored) {}
+	    }
+	}
+	return -1;
+    }
+
+    public int ownOpening(Fightview fv, String opening) {
+	return openingValue(fv == null ? null : fv.buffs, opening);
+    }
+
+    public int enemyOpening(Fightview fv, String opening) {
+	return openingValue((fv == null || fv.current == null) ? null : fv.current.buffs, opening);
+    }
+
+    public int enemyMaxOpening(Fightview fv) {
+	Bufflist buffs = (fv == null || fv.current == null) ? null : fv.current.buffs;
+	if(buffs == null)
+	    return 0;
+	int ret = 0;
+	ret = Math.max(ret, openingValue(buffs, Buff.OPEN_RED));
+	ret = Math.max(ret, openingValue(buffs, Buff.OPEN_YELLOW));
+	ret = Math.max(ret, openingValue(buffs, Buff.OPEN_BLUE));
+	ret = Math.max(ret, openingValue(buffs, Buff.OPEN_GREEN));
+	return ret;
+    }
+
+    public int enemyMinOpening(Fightview fv) {
+	Bufflist buffs = (fv == null || fv.current == null) ? null : fv.current.buffs;
+	if(buffs == null)
+	    return 0;
+	int ret = 100;
+	ret = Math.min(ret, openingValue(buffs, Buff.OPEN_RED));
+	ret = Math.min(ret, openingValue(buffs, Buff.OPEN_YELLOW));
+	ret = Math.min(ret, openingValue(buffs, Buff.OPEN_BLUE));
+	ret = Math.min(ret, openingValue(buffs, Buff.OPEN_GREEN));
+	return ret;
+    }
+
+    private int openingValue(Bufflist buffs, String opening) {
+	if(buffs == null)
+	    return 0;
+	for(Buff buff : buffs.children(Buff.class)) {
+	    try {
+		if(opening.equals(buff.res.get().name))
+		    return Math.max(0, buff.ameter());
+	    } catch(Loading ignored) {}
+	}
+	return 0;
+    }
+
+    private boolean hasLoadedMove() {
+	return use >= 0 || useb >= 0;
+    }
+
+    private boolean enemyTooCloseForSemiReducer() {
+	GameUI gui = getparent(GameUI.class);
+	MapView map = gui == null ? null : gui.map;
+	Gob player = map == null ? null : map.player();
+	if(player == null)
+	    return false;
+	double maxdist = SEMI_REDUCER_MIN_DISTANCE * 11.0;
+	for(Fightview.Relation rel : fv.lsrel) {
+	    Gob gob = ui.sess.glob.oc.getgob(rel.gobid);
+	    if(gob == null || gob.disposed() || gob.is(GobTag.PARTY) || Boolean.TRUE.equals(gob.isMe()))
+		continue;
+	    if(player.rc.dist(gob.rc) < maxdist)
+		return true;
+	}
+	return false;
     }
 
     public void debugEffects(PrintWriter out) {
@@ -202,21 +464,172 @@ public class Fightsess extends Widget {
 		i++, fx.spr, fx.used, fx.slot == null ? "none" : "live");
 	}
     }
+    
+    private double inactiveScale() {
+	return(Utils.clip(CFG.COMBAT_UI_INACTIVE_SCALE.get(), 1, 100) / 100.0);
+    }
+    
+    private Coord inactiveDraggerSize() {
+	Coord sz = INACTIVE_DRAGGER_BASE_SZ.mul(inactiveScale());
+	return(Coord.of(Math.max(INACTIVE_DRAGGER_MIN_SZ.x, sz.x), Math.max(INACTIVE_DRAGGER_MIN_SZ.y, sz.y)));
+    }
+    
+    private static double openingDecayRate() {
+	return(Utils.clip(CFG.COMBAT_UI_OPENING_DECAY.get(), 0, 50) / 10.0);
+    }
+    
+    private void addinactivebuff(Buff buff, Coord center, Coord dc, boolean enemy) {
+	inactivebuffs.add(new InactiveBuff(buff, dc.sub(center), enemy));
+    }
+    
+    private void addopeningsample(Collection<OpeningSample> samples, String side, Buff buff, double now) {
+	try {
+	    if((Buff.openingColor(buff.res.get().name) != null) && (buff.ameter() >= 0))
+		samples.add(new OpeningSample(side, buff, now));
+	} catch(Loading l) {
+	}
+    }
+    
+    private void snapshotinactive() {
+	inactivebuffs.clear();
+	if(fv == null)
+	    return;
+	boolean altui = CFG.ALT_COMBAT_UI.get();
+	Coord c0 = dragger.c.add(dragger.sz.div(2));
+	int x0 = c0.x, y0 = c0.y;
+	Coord center = altui ? c0 : pcc;
+	for(Buff buff : fv.buffs.children(Buff.class)) {
+	    Coord dc = altui ? new Coord(x0 - buff.c.x - Buff.cframe.sz().x - UI.scale(80), y0) : pcc.add(-buff.c.x - Buff.cframe.sz().x - UI.scale(20), buff.c.y + pho - Buff.cframe.sz().y);
+	    addinactivebuff(buff, center, dc, false);
+	}
+	if(fv.current != null) {
+	    for(Buff buff : fv.current.buffs.children(Buff.class)) {
+		Coord dc = altui ? new Coord(x0 + buff.c.x + UI.scale(80), y0) : pcc.add(buff.c.x + UI.scale(20), buff.c.y + pho - Buff.cframe.sz().y);
+		addinactivebuff(buff, center, dc, true);
+	    }
+	}
+    }
+    
+    private void snapshotopenings() {
+	if(!CFG.COMBAT_DEBUG_OPENING_RECOVERY.get()) {
+	    lastOpeningSamples = Collections.emptyList();
+	    return;
+	}
+	Collection<OpeningSample> samples = new ArrayList<>();
+	if(fv != null) {
+	    double now = Utils.rtime();
+	    for(Buff buff : fv.buffs.children(Buff.class))
+		addopeningsample(samples, "mine", buff, now);
+	    if(fv.current != null) {
+		for(Buff buff : fv.current.buffs.children(Buff.class))
+		    addopeningsample(samples, "theirs", buff, now);
+	    }
+	}
+	lastOpeningSamples = samples;
+    }
+    
+    private void reportOpeningDecay() {
+	if(!CFG.COMBAT_DEBUG_OPENING_RECOVERY.get())
+	    return;
+	if(reportedDecay || lastOpeningSamples.isEmpty() || (fv == null) || (fv.current == null))
+	    return;
+	Map<String, OpeningSample> prev = new HashMap<>();
+	for(OpeningSample sample : lastOpeningSamples)
+	    prev.put(sample.key(), sample);
+	Collection<OpeningMeasurement> measurements = new ArrayList<>();
+	double total = 0;
+	int n = 0;
+	measureOpeningDecay(prev, measurements, "mine", fv.buffs.children(Buff.class));
+	measureOpeningDecay(prev, measurements, "theirs", fv.current.buffs.children(Buff.class));
+	Collection<String> parts = new ArrayList<>();
+	for(OpeningMeasurement measurement : measurements) {
+	    parts.add(measurement.text);
+	    total += measurement.rate;
+	    n++;
+	}
+	if(!parts.isEmpty()) {
+	    reportedDecay = true;
+	    String msg = "Measured opening recovery: " + String.join(", ", parts);
+	    if(n > 1)
+		msg += String.format(" (avg %.2f%%/s)", total / n);
+	    if(ui.gui != null)
+		ui.gui.msg(msg, GameUI.MsgType.INFO);
+	    System.out.println(msg);
+	}
+    }
+    
+    private void measureOpeningDecay(Map<String, OpeningSample> prev, Collection<OpeningMeasurement> measurements, String side, Collection<Buff> buffs) {
+	for(Buff buff : buffs) {
+	    try {
+		String name = buff.res.get().name;
+		if(Buff.openingColor(name) == null)
+		    continue;
+		OpeningSample old = prev.get(side + ":" + name);
+		int nowv = buff.ameter();
+		if((old == null) || (old.value < 0) || (nowv < 0))
+		    continue;
+		double elapsed = Utils.rtime() - old.time;
+		if(elapsed < 0.5)
+		    continue;
+		double rate = (old.value - nowv) / elapsed;
+		if((rate >= MIN_MEASURED_OPENING_DECAY) && (rate <= MAX_MEASURED_OPENING_DECAY))
+		    measurements.add(new OpeningMeasurement(String.format("%s %s %d->%d over %.1fs = %.2f%%/s", side, openingName(name), old.value, nowv, elapsed, rate), rate));
+	    } catch(Loading l) {
+	    }
+	}
+    }
+    
+    private static String openingName(String resname) {
+	int p = resname.lastIndexOf('/');
+	return((p >= 0) ? resname.substring(p + 1) : resname);
+    }
 
     public void destroy() {
-	for(Effect fx : curfx) {
-	    if(fx.slot != null)
-		fx.slot.remove();
+	if(!ended) {
+	    for(Effect fx : curfx) {
+		if(fx.slot != null)
+		    fx.slot.remove();
+	    }
+	    curfx.clear();
+	    ui.gui.calendar.show();
+	    if(CFG.CLEAR_PLAYER_DMG_AFTER_COMBAT.get()) {
+		haven.Action.CLEAR_PLAYER_DAMAGE.run(ui.gui);
+	    }
+	    if(CFG.CLEAR_ALL_DMG_AFTER_COMBAT.get()) {
+		haven.Action.CLEAR_ALL_DAMAGE.run(ui.gui);
+	    }
+	    if(fv != null) {
+		snapshotinactive();
+		snapshotopenings();
+		inactiveStart = Utils.rtime();
+		lastact1 = fv.lastact;
+		lastuse1 = fv.lastuse;
+		if(fv.current != null) {
+		    boolean altui = CFG.ALT_COMBAT_UI.get();
+		    lastact2 = fv.current.lastact;
+		    lastuse2 = fv.current.lastuse;
+		    inactiveip = ipf.render((altui ? "" : "IP: ") + fv.current.ip);
+		    inactiveoip = ipf.render((altui ? "" : "IP: ") + fv.current.oip);
+		}
+	    }
+	    ended = true;
 	}
-	curfx.clear();
-	ui.gui.calendar.show();
-	if(CFG.CLEAR_PLAYER_DMG_AFTER_COMBAT.get()) {
-	    haven.Action.CLEAR_PLAYER_DAMAGE.run(ui.gui);
+	if(forcedestroy) {
+	    super.destroy();
+	} else if(!CFG.KEEP_COMBAT_UI_AFTER_COMBAT.get()) {
+	    super.destroy();
+	} else if(active) {
+	    active = false;
+	    fv = null;
+	    Coord center = dragger.c.add(dragger.sz.div(2));
+	    dragger.sz = inactiveDraggerSize();
+	    dragger.c = center.sub(dragger.sz.div(2));
 	}
-	if(CFG.CLEAR_ALL_DMG_AFTER_COMBAT.get()) {
-	    haven.Action.CLEAR_ALL_DAMAGE.run(ui.gui);
-	}
-	super.destroy();
+    }
+    
+    public void forceDestroy() {
+	forcedestroy = true;
+	destroy();
     }
 
     private static final Text.Furnace ipf = new PUtils.BlurFurn(new Text.Foundry(Text.serif, 18, new Color(128, 128, 255)).aa(true), 1, 1, new Color(48, 48, 96));
@@ -228,13 +641,24 @@ public class Fightsess extends Widget {
 	return(new Coord((actpitch * (i % rl)) - (((rl - 1) * actpitch) / 2), UI.scale(125) + ((i / rl) * actpitch)));
     }
 
+    private static Coord utilityc(int i) {
+	int rl = 5;
+	return(new Coord((actpitch * (i % rl)) - (((rl - 1) * actpitch) / 2), UI.scale(225)));
+    }
+
     private static final Coord cmc = UI.scale(new Coord(0, 67));
     private static final Coord usec1 = UI.scale(new Coord(-65, 67));
     private static final Coord usec2 = UI.scale(new Coord(65, 67));
     private Indir<Resource> lastact1 = null, lastact2 = null;
+    private double lastuse1 = 0, lastuse2 = 0;
+    private Text inactiveip = null, inactiveoip = null;
     private Text lastacttip1 = null, lastacttip2 = null;
     private Effect curtgtfx;
     public void draw(GOut g) {
+	if(!active) {
+	    drawinactive(g);
+	    return;
+	}
 	updatepos();
         boolean altui = CFG.ALT_COMBAT_UI.get();
 	Coord c0 = ui.gui.calendar.rootpos().add(ui.gui.calendar.sz.div(2));
@@ -245,6 +669,7 @@ public class Fightsess extends Widget {
 	int y0 = c0.y;
 	int bottom = ui.gui.beltwdg.c.y - UI.scale(40);
 	double now = Utils.rtime();
+	reportOpeningDecay();
 
 	for(Buff buff : fv.buffs.children(Buff.class))
 	    buff.draw(g.reclip(altui ? new Coord(x0 - buff.c.x - Buff.cframe.sz().x - UI.scale(80), y0) : pcc.add(-buff.c.x - Buff.cframe.sz().x - UI.scale(20), buff.c.y + pho - Buff.cframe.sz().y), buff.sz));
@@ -343,9 +768,212 @@ public class Fightsess extends Widget {
 		}
 	    } catch(Loading l) {}
 	}
+	drawReducerBar(g, altui, xa, bottom);
+    }
+
+    private void drawReducerBar(GOut g, boolean altui, int xa, int bottom) {
+	for(int i = 0; i < 5; i++) {
+	    Coord ca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(i)) : pcc.add(utilityc(i));
+	    g.image(actframe, ca.sub(actframeo));
+	    if(i == 0) {
+		drawReducerIcon(g, ca);
+		if(CFG.SHOW_COMBAT_KEYS.get())
+		    g.aimage(reducerKeyTex(), ca.add(off), 1, 1);
+	    } else if(i == 1) {
+		drawTargetClosestIcon(g, ca);
+		if(CFG.SHOW_COMBAT_KEYS.get())
+		    g.aimage(targetClosestKeyTex(), ca.add(off), 1, 1);
+	    } else if(i == 4) {
+		drawGuardedSkillIcon(g, ca);
+		if(CFG.SHOW_COMBAT_KEYS.get())
+		    g.aimage(guardedSkillsKeyTex(), ca.add(off), 1, 1);
+	    }
+	}
+    }
+
+    private void drawReducerIcon(GOut g, Coord ca) {
+	Coord center = ca.add(off.div(2));
+	g.chcolor(0, 0, 0, 150);
+	g.frect(ca.add(UI.scale(4, 4)), off.sub(UI.scale(8, 8)));
+	g.chcolor();
+	Color first = reducerMode == CombatReducerMode.ON || reducerMode == CombatReducerMode.SEMI ? new Color(60, 230, 80) : new Color(150, 150, 150);
+	Color second = reducerMode == CombatReducerMode.ON ? new Color(60, 230, 80) : new Color(150, 150, 150);
+	drawArrow(g, center.add(-UI.scale(1), -UI.scale(3)), UI.scale(10), true, first);
+	drawArrow(g, center.add(UI.scale(1), UI.scale(4)), UI.scale(10), false, second);
+    }
+
+    private void drawTargetClosestIcon(GOut g, Coord ca) {
+	Coord center = ca.add(off.div(2));
+	boolean on = CFG.MAZES_TARGET_CLOSEST_COMBAT.get();
+	Color color = on ? new Color(60, 230, 80) : new Color(150, 150, 150);
+	g.chcolor(0, 0, 0, 150);
+	g.frect(ca.add(UI.scale(4, 4)), off.sub(UI.scale(8, 8)));
+	g.chcolor(color);
+	g.line(center.add(-UI.scale(10), 0), center.add(UI.scale(10), 0), UI.scale(2));
+	g.line(center.add(0, -UI.scale(10)), center.add(0, UI.scale(10)), UI.scale(2));
+	g.fellipse(center, UI.scale(4, 4));
+	g.chcolor();
+    }
+
+    private void drawGuardedSkillIcon(GOut g, Coord ca) {
+	Coord center = ca.add(off.div(2));
+	boolean on = CFG.GUARDED_COMBAT_SKILLS_ENABLED.get();
+	Color color = on ? new Color(60, 230, 80) : new Color(150, 150, 150);
+	g.chcolor(0, 0, 0, 150);
+	g.frect(ca.add(UI.scale(4, 4)), off.sub(UI.scale(8, 8)));
+	g.chcolor(color);
+	g.line(center.add(-UI.scale(8), -UI.scale(8)), center.add(UI.scale(8), UI.scale(8)), UI.scale(2));
+	g.line(center.add(UI.scale(8), -UI.scale(8)), center.add(-UI.scale(8), UI.scale(8)), UI.scale(2));
+	if(guardedSkill != null) {
+	    try {
+		Tex img = guardedSkill.res.get().flayer(Resource.imgc).tex();
+		g.chcolor(255, 255, 255, 180);
+		g.image(img, ca.add(off.sub(img.sz()).div(2)));
+	    } catch(Loading ignored) {}
+	}
+	g.chcolor();
+    }
+
+    private void drawArrow(GOut g, Coord c, int r, boolean upper, Color color) {
+	g.chcolor(color);
+	if(upper) {
+	    g.line(c.add(-r, 0), c.add(0, -r), UI.scale(2));
+	    g.line(c.add(0, -r), c.add(r, 0), UI.scale(2));
+	    g.line(c.add(r, 0), c.add(r - UI.scale(5), -UI.scale(1)), UI.scale(2));
+	    g.line(c.add(r, 0), c.add(r - UI.scale(1), -UI.scale(5)), UI.scale(2));
+	} else {
+	    g.line(c.add(r, 0), c.add(0, r), UI.scale(2));
+	    g.line(c.add(0, r), c.add(-r, 0), UI.scale(2));
+	    g.line(c.add(-r, 0), c.add(-r + UI.scale(5), UI.scale(1)), UI.scale(2));
+	    g.line(c.add(-r, 0), c.add(-r + UI.scale(1), UI.scale(5)), UI.scale(2));
+	}
+	g.chcolor();
+    }
+    
+    private void drawinactive(GOut g) {
+	Coord c0 = ui.gui.calendar.rootpos().add(ui.gui.calendar.sz.div(2));
+	Coord nsz = inactiveDraggerSize();
+	if(!dragger.sz.equals(nsz)) {
+	    Coord center = dragger.c.add(dragger.sz.div(2));
+	    dragger.sz = nsz;
+	    dragger.c = center.sub(dragger.sz.div(2));
+	}
+	dragger.origin(c0.sub(dragger.sz.div(2)));
+	Coord center = dragger.c.add(dragger.sz.div(2));
+	double scale = inactiveScale();
+	double now = Utils.rtime();
+	double ownAlpha = 0;
+	for(InactiveBuff buff : inactivebuffs) {
+	    int alpha = inactiveBuffAlpha(buff, now);
+	    if(!buff.enemy)
+		ownAlpha = Math.max(ownAlpha, alpha / 255.0);
+	    drawinactivebuff(g, buff, center.add(buff.relc.mul(scale)), scale, alpha);
+	}
+	Coord cdc = center.add(cmc.mul(scale));
+	Coord cdsz = cdframe.sz().mul(scale);
+	int cooldownAlpha = inactiveCooldownAlpha(now, ownAlpha);
+	if(cooldownAlpha > 0) {
+	    g.chcolor(255, 255, 255, cooldownAlpha);
+	    g.image(cdframe, cdc.sub(cdsz.div(2)), cdsz);
+	    g.chcolor();
+	}
+	int endedAlpha = fadeAlpha(inactiveStart, now);
+	if(inactiveip != null) {
+	    Coord psz = inactiveip.sz().mul(scale);
+	    Coord pc = center.add(new Coord(-UI.scale(45), -UI.scale(16)).mul(scale));
+	    g.chcolor(255, 255, 255, endedAlpha);
+	    g.image(inactiveip.tex(), pc.sub(psz.x, psz.y / 2), psz);
+	    g.chcolor();
+	}
+	if(inactiveoip != null) {
+	    Coord psz = inactiveoip.sz().mul(scale);
+	    Coord pc = center.add(new Coord(UI.scale(45), -UI.scale(16)).mul(scale));
+	    g.chcolor(255, 255, 255, endedAlpha);
+	    g.image(inactiveoip.tex(), pc.sub(0, psz.y / 2), psz);
+	    g.chcolor();
+	}
+	drawinactiveuse(g, lastact1, lastuse1, center.add(usec1.mul(scale)), now, scale, cooldownAlpha);
+	drawinactiveuse(g, lastact2, lastuse2, center.add(usec2.mul(scale)), now, scale, endedAlpha);
+    }
+    
+    private int inactiveBuffAlpha(InactiveBuff buff, double now) {
+	return(fadeAlpha(buff.fadeStart(), now));
+    }
+    
+    private int inactiveCooldownAlpha(double now, double ownAlpha) {
+	if(ownAlpha > 0)
+	    return((int)Math.round(255 * ownAlpha));
+	return(fadeAlpha(inactiveStart, now));
+    }
+    
+    private static int fadeAlpha(double fadeStart, double now) {
+	if(fadeStart <= 0)
+	    return(255);
+	double elapsed = now - fadeStart;
+	if(elapsed <= 0)
+	    return(255);
+	if(elapsed >= INACTIVE_FADE_TIME)
+	    return(0);
+	return((int)Math.round(255 * (1.0 - (elapsed / INACTIVE_FADE_TIME))));
+    }
+    
+    private void drawinactivebuff(GOut g, InactiveBuff buff, Coord c, double scale, int alpha) {
+	if(alpha <= 0)
+	    return;
+	try {
+	    Resource res = buff.res.get();
+	    Tex img = res.flayer(Resource.imgc).tex();
+	    Coord fsz = Buff.cframe.sz().mul(scale);
+	    Coord imgoff = Buff.imgoff.mul(scale);
+	    Coord isz = img.sz().mul(scale);
+	    g.chcolor(255, 255, 255, alpha);
+	    g.image(Buff.frame, c, fsz);
+	    Color opening = Buff.openingColor(res.name);
+	    if(CFG.SIMPLE_COMBAT_OPENINGS.get() && (opening != null)) {
+		g.chcolor(opening.getRed(), opening.getGreen(), opening.getBlue(), alpha);
+		g.frect(c.add(imgoff), isz);
+		g.chcolor(255, 255, 255, alpha);
+		int ameter = buff.ameter();
+		if(ameter >= 0) {
+		    Tex meteri = Text.renderstroked(Integer.toString(ameter), Buff.nfnd).tex();
+		    Coord msz = meteri.sz().mul(scale);
+		    g.aimage(meteri, c.add(imgoff).add(isz).sub(1, 1), 1, 1, msz);
+		}
+	    } else {
+		g.image(img, c.add(imgoff), isz);
+	    }
+	    g.chcolor();
+	} catch(Loading l) {
+	    g.chcolor();
+	}
+    }
+    
+    private void drawinactiveuse(GOut g, Indir<Resource> lastact, double lastuse, Coord c, double now, double scale, int alpha) {
+	if((lastact == null) || (alpha <= 0))
+	    return;
+	try {
+	    Tex ut = lastact.get().flayer(Resource.imgc).tex();
+	    Coord usz = ut.sz().mul(scale);
+	    Coord useul = c.sub(usz.div(2));
+	    g.chcolor(255, 255, 255, alpha);
+	    g.image(ut, useul, usz);
+	    g.image(useframe, useul.sub(useframeo.mul(scale)), useframe.sz().mul(scale));
+	    double a = now - lastuse;
+	    if(a < 1) {
+		Coord off = new Coord((int)(a * usz.x / 2), (int)(a * usz.y / 2));
+		g.chcolor(255, 255, 255, (int)(alpha * (1 - a)));
+		g.image(ut, useul.sub(off), usz.add(off.mul(2)));
+	    }
+	    g.chcolor();
+	} catch(Loading l) {
+	    g.chcolor();
+	}
     }
     
     public static final Tex[] keytex = new Tex[keybinds.length];
+    public static Tex reducerKeyTex = null;
+    public static Tex targetClosestKeyTex = null;
+    public static Tex guardedSkillsKeyTex = null;
     
     static {
 	Reactor.listen(COMBAT_KEYS_UPDATED, () ->
@@ -354,6 +982,12 @@ public class Fightsess extends Widget {
 		if(keytex[i] != null) { keytex[i].dispose(); }
 		keytex[i] = null;
 	    }
+	    if(reducerKeyTex != null) {reducerKeyTex.dispose();}
+	    reducerKeyTex = null;
+	    if(targetClosestKeyTex != null) {targetClosestKeyTex.dispose();}
+	    targetClosestKeyTex = null;
+	    if(guardedSkillsKeyTex != null) {guardedSkillsKeyTex.dispose();}
+	    guardedSkillsKeyTex = null;
 	});
     }
     
@@ -363,15 +997,47 @@ public class Fightsess extends Widget {
 	}
 	return keytex[i];
     }
+
+    private Tex reducerKeyTex() {
+	if(reducerKeyTex == null)
+	    reducerKeyTex = Text.renderstroked(reducerKeybind.shortcut(true), fnd).tex();
+	return reducerKeyTex;
+    }
+
+    private Tex targetClosestKeyTex() {
+	if(targetClosestKeyTex == null)
+	    targetClosestKeyTex = Text.renderstroked(targetClosestKeybind.shortcut(true), fnd).tex();
+	return targetClosestKeyTex;
+    }
+
+    private Tex guardedSkillsKeyTex() {
+	if(guardedSkillsKeyTex == null)
+	    guardedSkillsKeyTex = Text.renderstroked(guardedSkillsKeybind.shortcut(true), fnd).tex();
+	return guardedSkillsKeyTex;
+    }
     
     private Widget prevtt = null;
     private Text acttip = null;
     
     public Object tooltip(Coord c, Widget prev) {
+	if(!active)
+	    return(null);
 	boolean altui = CFG.ALT_COMBAT_UI.get();
 	int x0 =  ui.gui.calendar.rootpos().x + ui.gui.calendar.sz.x / 2;
+	int xa = x0;
 	int y0 =  ui.gui.calendar.rootpos().y + ui.gui.calendar.sz.y / 2;
 	int bottom = ui.gui.beltwdg.c.y - 40;
+	Coord rca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(0)) : pcc.add(utilityc(0));
+	if(c.isect(rca, off))
+	    return "Auto combat reducer: " + reducerMode.label;
+	Coord tca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(1)) : pcc.add(utilityc(1));
+	if(c.isect(tca, off))
+	    return "Target closest: " + (CFG.MAZES_TARGET_CLOSEST_COMBAT.get() ? "On" : "Off");
+	Coord gca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(4)) : pcc.add(utilityc(4));
+	if(c.isect(gca, off))
+	    return guardedSkill == null
+		? "Guarded skills: " + (CFG.GUARDED_COMBAT_SKILLS_ENABLED.get() ? "On" : "Off")
+		: "Queued: " + GuardedCombatSkills.label(guardedSkill.resname);
 	for(Buff buff : fv.buffs.children(Buff.class)) {
 	    Coord dc = altui ? new Coord(x0 - buff.c.x - Buff.cframe.sz().x - UI.scale(80), y0) : pcc.add(-buff.c.x - Buff.cframe.sz().x - UI.scale(20), buff.c.y + pho - Buff.cframe.sz().y);
 	    if(c.isect(dc, buff.sz)) {
@@ -435,6 +1101,118 @@ public class Fightsess extends Widget {
 	}
 	return(null);
     }
+    
+    public boolean mousedown(MouseDownEvent ev) {
+	if(active && ev.b == 1 && ev.c.isect(reducerButtonCoord(), off)) {
+	    cycleReducerMode();
+	    return true;
+	}
+	if(active && ev.b == 1 && ev.c.isect(utilityButtonCoord(1), off)) {
+	    toggleTargetClosest();
+	    return true;
+	}
+	if(active && ev.b == 1 && ev.c.isect(utilityButtonCoord(4), off)) {
+	    toggleGuardedSkills();
+	    return true;
+	}
+	if(!active && DraggableWidget.guiEditMode() && ev.c.isect(dragger.c, dragger.sz))
+	    return(true);
+	return(super.mousedown(ev));
+    }
+
+    private Coord reducerButtonCoord() {
+	return utilityButtonCoord(0);
+    }
+
+    private Coord utilityButtonCoord(int i) {
+	boolean altui = CFG.ALT_COMBAT_UI.get();
+	int xa = ui.gui.calendar.rootpos().x + ui.gui.calendar.sz.x / 2;
+	int bottom = ui.gui.beltwdg.c.y - UI.scale(40);
+	return altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(i)) : pcc.add(utilityc(i));
+    }
+
+    private void cycleReducerMode() {
+	reducerMode = reducerMode.next();
+    }
+
+    private void toggleTargetClosest() {
+	CFG.MAZES_TARGET_CLOSEST_COMBAT.set(!CFG.MAZES_TARGET_CLOSEST_COMBAT.get());
+    }
+
+    private void toggleGuardedSkills() {
+	CFG.GUARDED_COMBAT_SKILLS_ENABLED.set(!CFG.GUARDED_COMBAT_SKILLS_ENABLED.get());
+	if(!CFG.GUARDED_COMBAT_SKILLS_ENABLED.get())
+	    guardedSkill = null;
+    }
+
+    public boolean handleUtilityKey(KbdEvent ev) {
+	if(!active)
+	    return false;
+	if(reducerKeybind.match(ev)) {
+	    cycleReducerMode();
+	    return true;
+	}
+	if(targetClosestKeybind.match(ev)) {
+	    toggleTargetClosest();
+	    return true;
+	}
+	if(guardedSkillsKeybind.match(ev)) {
+	    toggleGuardedSkills();
+	    return true;
+	}
+	return false;
+    }
+
+    private boolean queueOrUse(int fn, int button, int modflags, Coord mc) {
+	Action act = actions[fn];
+	if(act == null)
+	    return false;
+	try {
+	    String resname = act.res.get().name;
+	    if(CFG.GUARDED_COMBAT_SKILLS_ENABLED.get() && GuardedCombatSkills.enabled(resname) && !GuardedCombatSkills.canUse(resname, this, fv)) {
+		guardedSkill = new QueuedGuardedSkill(fn, button, modflags, mc, act.res, resname);
+		return true;
+	    }
+	} catch(Loading ignored) {}
+	if(mc == null)
+	    wdgmsg("use", fn, button, modflags);
+	else
+	    wdgmsg("use", fn, button, modflags, mc);
+	return false;
+    }
+
+    private void releaseGuardedSkill() {
+	if(guardedSkill == null || !active || fv == null)
+	    return;
+	if(guardedSkill.fn < 0 || guardedSkill.fn >= actions.length || actions[guardedSkill.fn] == null) {
+	    guardedSkill = null;
+	    return;
+	}
+	if(!GuardedCombatSkills.canUse(guardedSkill.resname, this, fv))
+	    return;
+	QueuedGuardedSkill use = guardedSkill;
+	guardedSkill = null;
+	if(use.mc == null)
+	    wdgmsg("use", use.fn, use.button, use.modflags);
+	else
+	    wdgmsg("use", use.fn, use.button, use.modflags, use.mc);
+    }
+
+    private static class QueuedGuardedSkill {
+	final int fn, button, modflags;
+	final Coord mc;
+	final Indir<Resource> res;
+	final String resname;
+
+	QueuedGuardedSkill(int fn, int button, int modflags, Coord mc, Indir<Resource> res, String resname) {
+	    this.fn = fn;
+	    this.button = button;
+	    this.modflags = modflags;
+	    this.mc = mc;
+	    this.res = res;
+	    this.resname = resname;
+	}
+    }
 
     public void uimsg(String msg, Object... args) {
 	if(msg == "act") {
@@ -495,12 +1273,17 @@ public class Fightsess extends Widget {
     private UI.Grab holdgrab = null;
     private int held = -1;
     public boolean globtype(GlobKeyEvent ev) {
+	if(!active)
+	    return(super.globtype(ev));
 	// ev = new KeyEvent((java.awt.Component)ev.getSource(), ev.getID(), ev.getWhen(), ev.getModifiersEx(), ev.getKeyCode(), ev.getKeyChar(), ev.getKeyLocation());
+	if(handleUtilityKey(ev))
+	    return true;
 	{
 	    int fn = getAction(ev);
 	    if((fn >= 0) && (fn < actions.length)) {
 		MapView map = getparent(GameUI.class).map;
 		Coord mvc = map.rootxlate(ui.mc);
+		final boolean[] queued = {false};
 		if(held >= 0) {
 		    new Release(held);
 		    held = -1;
@@ -508,14 +1291,16 @@ public class Fightsess extends Widget {
 		if(mvc.isect(Coord.z, map.sz)) {
 		    map.new Maptest(mvc) {
 			    protected void hit(Coord pc, Coord2d mc) {
-				wdgmsg("use", fn, 1, ui.modflags(), mc.floor(OCache.posres));
+				queued[0] = queueOrUse(fn, 1, ui.modflags(), mc.floor(OCache.posres));
 			    }
 
 			    protected void nohit(Coord pc) {
-				wdgmsg("use", fn, 1, ui.modflags());
+				queued[0] = queueOrUse(fn, 1, ui.modflags(), null);
 			    }
 			}.run();
 		}
+		if(queued[0])
+		    return true;
 		if(holdgrab == null)
 		    holdgrab = ui.grabkeys(this);
 		held = fn;
@@ -547,6 +1332,8 @@ public class Fightsess extends Widget {
     }
 
     public boolean keyup(KeyUpEvent ev) {
+	if(!active)
+	    return(false);
 	if(ev.grabbed && (keybinds[held].match(ev, KeyBinder.MODS))) {
 	    MapView map = getparent(GameUI.class).map;
 	    new Release(held);
@@ -573,5 +1360,14 @@ public class Fightsess extends Widget {
 		keybinds[i] = combat[i];
 	    }
 	}
+    }
+
+    public static void updateUtilityKeybinds(KeyBind reducer, KeyBind targetClosest, KeyBind guardedSkills) {
+	if(reducer != null)
+	    reducerKeybind = reducer;
+	if(targetClosest != null)
+	    targetClosestKeybind = targetClosest;
+	if(guardedSkills != null)
+	    guardedSkillsKeybind = guardedSkills;
     }
 }

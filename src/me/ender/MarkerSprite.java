@@ -9,7 +9,6 @@ import java.awt.*;
 import java.util.function.Supplier;
 
 public class MarkerSprite extends Sprite {
-    private static final Supplier<FastMesh> COMBAT = MeshUtils.Ring(4f, 1.75f);
     private static final Supplier<FastMesh> CIRCLE_6 = MeshUtils.Circle(6f);
     private static final Supplier<FastMesh> CIRCLE_10 = MeshUtils.Circle(10f);
     public static Id SELF = Combat(CFG.COLOR_GOB_SELF);
@@ -27,6 +26,13 @@ public class MarkerSprite extends Sprite {
 	CFG.COLOR_GOB_LEADER.observe(cfg -> LEADER = Combat(cfg));
 	CFG.COLOR_GOB_IN_COMBAT.observe(cfg -> ENEMY = Combat(cfg));
 	CFG.COLOR_GOB_COMBAT_TARGET.observe(cfg -> TARGET = Combat(cfg));
+	CFG.COMBAT_MARKER_RADIUS.observe(cfg -> {
+	    SELF = Combat(CFG.COLOR_GOB_SELF);
+	    PARTY = Combat(CFG.COLOR_GOB_PARTY);
+	    LEADER = Combat(CFG.COLOR_GOB_LEADER);
+	    ENEMY = Combat(CFG.COLOR_GOB_IN_COMBAT);
+	    TARGET = Combat(CFG.COLOR_GOB_COMBAT_TARGET);
+	});
 	CFG.COLOR_GOB_RABBIT.observe(cfg -> RABBIT = new Id(cfg.get(), CIRCLE_10));
 	CFG.COLOR_GOB_CRITTERS.observe(cfg -> CRITTER = new Id(cfg.get(), CIRCLE_10));
 	CFG.COLOR_GOB_SPEED_BUFF.observe(cfg -> SPEED_BUFF = new Id(cfg.get(), CIRCLE_6));
@@ -67,7 +73,7 @@ public class MarkerSprite extends Sprite {
     }
     
     private static Id Combat(CFG<Color> cfg) {
-	return new Id(cfg.get(), COMBAT);
+	return new Id(cfg.get(), MeshUtils.Ring(CFG.COMBAT_MARKER_RADIUS.get(), 1.75f));
     }
     
     public static class Id {

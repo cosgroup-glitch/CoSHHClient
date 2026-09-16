@@ -42,6 +42,7 @@ public class KeyBinder {
 	    ConfigBean configBean = gson.fromJson(json, ConfigBean.class);
 	    tmpGeneralCFG = configBean.general;
 	    Fightsess.updateKeybinds(configBean.combat);
+	    Fightsess.updateUtilityKeybinds(configBean.combatReducer, configBean.targetClosest, configBean.guardedSkills);
 	    Reactor.event(COMBAT_KEYS_UPDATED);
 	} catch (Exception ignore) {}
 	
@@ -63,13 +64,19 @@ public class KeyBinder {
     }
     
     private static class ConfigBean {
-	ConfigBean(Map<Action, KeyBind> general, KeyBind[] combat) {
+	ConfigBean(Map<Action, KeyBind> general, KeyBind[] combat, KeyBind combatReducer, KeyBind targetClosest, KeyBind guardedSkills) {
 	    this.general = general;
 	    this.combat = combat;
+	    this.combatReducer = combatReducer;
+	    this.targetClosest = targetClosest;
+	    this.guardedSkills = guardedSkills;
 	}
 	
 	final Map<Action, KeyBind> general;
 	final KeyBind[] combat;
+	final KeyBind combatReducer;
+	final KeyBind targetClosest;
+	final KeyBind guardedSkills;
     }
     
     private static void defaults() {
@@ -142,7 +149,7 @@ public class KeyBinder {
     }
     
     private static synchronized void store() {
-	Config.saveFile(CONFIG_JSON, gson.toJson(new ConfigBean(binds, Fightsess.keybinds)));
+	Config.saveFile(CONFIG_JSON, gson.toJson(new ConfigBean(binds, Fightsess.keybinds, Fightsess.reducerKeybind, Fightsess.targetClosestKeybind, Fightsess.guardedSkillsKeybind)));
     }
     
     public static boolean handle(UI ui, GlobKeyEvent e) {
@@ -235,7 +242,7 @@ public class KeyBinder {
     }
     
     private static List<ShortcutWidget> makeCombatWidgets() {
-	final List<ShortcutWidget> list = new ArrayList<>(Fightsess.keybinds.length);
+	final List<ShortcutWidget> list = new ArrayList<>(Fightsess.keybinds.length + 3);
 	for (int k = 0; k < Fightsess.keybinds.length; k++) {
 	    list.add(new ShortcutWidget(Fightsess.keybinds[k], (from, to) -> {
 		if(to.equals(from)) {return;}
@@ -251,6 +258,66 @@ public class KeyBinder {
 		store();
 	    }, String.format("Action %02d", k + 1)));
 	}
+	list.add(new ShortcutWidget(Fightsess.reducerKeybind, (from, to) -> {
+	    if(to.equals(from)) {return;}
+	    for (int i = 0; i < Fightsess.keybinds.length; i++) {
+		if(Fightsess.keybinds[i].equals(to)) {
+		    Fightsess.keybinds[i] = new KeyBind(0, 0);
+		    list.get(i).update(Fightsess.keybinds[i]);
+		}
+	    }
+	    if(Fightsess.targetClosestKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(to, new KeyBind(0, 0), null);
+		list.get(Fightsess.keybinds.length + 1).update(Fightsess.targetClosestKeybind);
+	    } else if(Fightsess.guardedSkillsKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(to, null, new KeyBind(0, 0));
+		list.get(Fightsess.keybinds.length + 2).update(Fightsess.guardedSkillsKeybind);
+	    } else {
+		Fightsess.updateUtilityKeybinds(to, null, null);
+	    }
+	    Reactor.event(COMBAT_KEYS_UPDATED);
+	    store();
+	}, "Auto combat reducer"));
+	list.add(new ShortcutWidget(Fightsess.targetClosestKeybind, (from, to) -> {
+	    if(to.equals(from)) {return;}
+	    for (int i = 0; i < Fightsess.keybinds.length; i++) {
+		if(Fightsess.keybinds[i].equals(to)) {
+		    Fightsess.keybinds[i] = new KeyBind(0, 0);
+		    list.get(i).update(Fightsess.keybinds[i]);
+		}
+	    }
+	    if(Fightsess.reducerKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(new KeyBind(0, 0), to, null);
+		list.get(Fightsess.keybinds.length).update(Fightsess.reducerKeybind);
+	    } else if(Fightsess.guardedSkillsKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(null, to, new KeyBind(0, 0));
+		list.get(Fightsess.keybinds.length + 2).update(Fightsess.guardedSkillsKeybind);
+	    } else {
+		Fightsess.updateUtilityKeybinds(null, to, null);
+	    }
+	    Reactor.event(COMBAT_KEYS_UPDATED);
+	    store();
+	}, "Target closest"));
+	list.add(new ShortcutWidget(Fightsess.guardedSkillsKeybind, (from, to) -> {
+	    if(to.equals(from)) {return;}
+	    for (int i = 0; i < Fightsess.keybinds.length; i++) {
+		if(Fightsess.keybinds[i].equals(to)) {
+		    Fightsess.keybinds[i] = new KeyBind(0, 0);
+		    list.get(i).update(Fightsess.keybinds[i]);
+		}
+	    }
+	    if(Fightsess.reducerKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(new KeyBind(0, 0), null, to);
+		list.get(Fightsess.keybinds.length).update(Fightsess.reducerKeybind);
+	    } else if(Fightsess.targetClosestKeybind.equals(to)) {
+		Fightsess.updateUtilityKeybinds(null, new KeyBind(0, 0), to);
+		list.get(Fightsess.keybinds.length + 1).update(Fightsess.targetClosestKeybind);
+	    } else {
+		Fightsess.updateUtilityKeybinds(null, null, to);
+	    }
+	    Reactor.event(COMBAT_KEYS_UPDATED);
+	    store();
+	}, "Guarded skills"));
 	return list;
     }
     

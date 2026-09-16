@@ -274,6 +274,24 @@
     <chmod file="bin/hafen.jar" perm="a+x" />
   </target>
 
+  <target name="dist" depends="bin">
+    <mkdir dir="dist" />
+    <zip destfile="dist/KamiClient.zip">
+      <fileset dir="." includes="run-kami-bin.bat" />
+      <zipfileset dir="bin" prefix="bin">
+	<include name="*.jar" />
+	<include name="haven-config.properties" />
+      </zipfileset>
+    </zip>
+    <checksum file="dist/KamiClient.zip" property="dist.sha256" algorithm="SHA-256" />
+    <echo file="dist/update.json">{
+  "version": "${version}",
+  "url": "KamiClient.zip",
+  "sha256": "${dist.sha256}",
+  "notes": "Kami Client update"
+}</echo>
+  </target>
+
   <target name="deftgt" depends="res-jar, jars, opt/panama, bin" />
   <target name="buildprocess" depends="jars"/>
 

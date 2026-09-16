@@ -346,9 +346,11 @@ public class ModSprite extends Sprite implements Sprite.CUpd, EquipTarget {
     }
     
     protected void omods(Collection<Mod> buf, Gob gob) {
-	for(GAttrib attr : gob.attr.values()) {
-	    if(attr instanceof Mod)
-		buf.add((Mod)attr);
+	synchronized(gob.attr) {
+	    for(GAttrib attr : gob.attr.values()) {
+		if(attr instanceof Mod)
+		    buf.add((Mod)attr);
+	    }
 	}
     }
     

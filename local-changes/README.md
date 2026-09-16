@@ -38,6 +38,10 @@ If there is no good upstream history, the practical reset is:
 2. Initialize/clone that as the baseline.
 3. Copy or apply only our local changes from this folder and the files listed in each change note.
 
+## Build Tool Note
+
+Apache Ant is installed for this workspace, but Codex shell sessions may fail to find it on `PATH` or may report misleading sandbox/path issues. Do not assume Ant is unavailable just because `ant` fails in one shell. Prefer the project build flow and, if needed, ask to run it outside the sandbox or use the user's configured Ant environment.
+
 ## Local Change Notes
 
 Each feature should get one markdown file here named like:

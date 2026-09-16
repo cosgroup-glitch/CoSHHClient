@@ -29,6 +29,7 @@ package haven;
 import me.ender.ChatCommands;
 import me.ender.ClientUtils;
 import me.ender.Reflect;
+import haven.res.ui.music.MusicWnd;
 
 import java.io.*;
 import java.util.*;
@@ -48,6 +49,7 @@ public class ChatUI extends Widget {
     public static final RichText.Foundry fnd = new RichText.Foundry(new ChatParser(TextAttribute.FONT, Text.dfont.deriveFont(UI.scale(12f)), TextAttribute.FOREGROUND, Color.BLACK)).aa(true);
     public static final Text.Foundry qfnd = new Text.Foundry(Text.dfont, 12, new java.awt.Color(192, 255, 192));
     private static final Text.Foundry edfnd = new Text.Foundry(Text.sansbold, 10).aa(true);
+    private static final Coord editEyeSz = UI.scale(18, 14);
     public static final int selw = UI.scale(130);
     public static final Coord marg = UI.scale(new Coord(9, 9));
     public static final Color[] urgcols = new Color[] {
@@ -62,6 +64,7 @@ public class ChatUI extends Widget {
     private Coord base = Coord.z;
     private WidgetCfg cfg;
     private boolean customPosition = false;
+    private boolean contentsVisible = true;
     private QuickLine qline = null;
     private final LinkedList<Notification> notifs = new LinkedList<Notification>();
     private UI.Grab qgrab;
@@ -76,6 +79,7 @@ public class ChatUI extends Widget {
     protected void added() {
 	cfg = WidgetCfg.get("ChatUI");
 	customPosition = (cfg != null) && cfg.getValue("custom-position", false);
+	contentsVisible = (cfg == null) || cfg.getValue("contents-visible", true);
 	if((cfg != null) && (cfg.sz != null))
 	    super.resize(cfg.sz);
 	if((cfg != null) && (cfg.c != null))
@@ -94,6 +98,7 @@ public class ChatUI extends Widget {
 	cfg.c = c;
 	cfg.sz = sz;
 	cfg.setValue("custom-position", customPosition);
+	cfg.setValue("contents-visible", contentsVisible);
 	WidgetCfg.set("ChatUI", cfg);
     }
 
@@ -1048,6 +1053,8 @@ public class ChatUI extends Widget {
 	    if(msg == "msg") {
 		Number from = (Number)args[0];
 		String line = (String)args[1];
+		if(processMusicSyncMessage(line))
+		    return;
 		if(process(line)) {
 		    if(from == null) {
 			append(new MyMessage(line), -1);
@@ -1074,6 +1081,31 @@ public class ChatUI extends Widget {
 	public String name() {
 	    return(name);
 	}
+
+	protected boolean processMusicSyncMessage(String line) {
+	    if(!line.startsWith("HFMPL@@@"))
+		return(false);
+	    try {
+		String[] parts = line.substring("HFMPL@@@".length()).split("\\|", 2);
+		if(parts.length != 2) {
+		    ui.gui.error("Cannot understand music sync message.");
+		    return(true);
+		}
+		long timeToPlay = Long.parseLong(parts[0]);
+		for(Widget w = ui.gui.lchild; w != null; w = w.prev) {
+		    if(w instanceof MusicWnd) {
+			MusicWnd musicWnd = (MusicWnd)w;
+			if(musicWnd.hafenMidiplayer != null) {
+			    musicWnd.hafenMidiplayer.synchPlay(timeToPlay, parts[1]);
+			    return(true);
+			}
+		    }
+		}
+		ui.gui.error("Open an instrument window before party MIDI playback.");
+	    } catch(NumberFormatException ignored) {
+	    }
+	    return(true);
+	}
     }
     
     public static class PartyChat extends MultiChat {
@@ -1086,7 +1118,9 @@ public class ChatUI extends Widget {
 		Number from = (Number)args[0];
 		long gobid = Utils.uiv(args[1]);
 		String line = (String)args[2];
-		if(process(line)) {
+		if(processMusicSyncMessage(line))
+		    return;
+		if(!ChatCommands.processCommand(ui, line, gobid)) {
 		    Color col = Color.WHITE;
 		    synchronized (ui.sess.glob.party.memb) {
 			Party.Member pm = ui.sess.glob.party.memb.get(gobid);
@@ -1575,17 +1609,19 @@ public class ChatUI extends Widget {
     private static final Tex bmf = Resource.loadtex("gfx/hud/chat-mid");
     private static final Tex bcbd = Resource.loadtex("gfx/hud/chat-close-g");
     public void draw(GOut g) {
-	g.chcolor(ToolBelt.BG_COLOR);
-	g.frect(Coord.z, sz);
-	g.chcolor(12, 16, 10, 190);
-	g.frect(marg.div(2), sz.sub(marg));
-	g.chcolor(156, 180, 158, 220);
-	g.line(Coord.z, Coord.of(sz.x - 1, 0), 1);
-	g.line(Coord.z, Coord.of(0, sz.y - 1), 1);
-	g.line(Coord.of(sz.x - 1, 0), sz.sub(1, 1), 1);
-	g.line(Coord.of(0, sz.y - 1), sz.sub(1, 1), 1);
-	g.chcolor();
-	super.draw(g);
+	if(contentsVisible) {
+	    g.chcolor(ToolBelt.BG_COLOR);
+	    g.frect(Coord.z, sz);
+	    g.chcolor(12, 16, 10, 190);
+	    g.frect(marg.div(2), sz.sub(marg));
+	    g.chcolor(156, 180, 158, 220);
+	    g.line(Coord.z, Coord.of(sz.x - 1, 0), 1);
+	    g.line(Coord.z, Coord.of(0, sz.y - 1), 1);
+	    g.line(Coord.of(sz.x - 1, 0), sz.sub(1, 1), 1);
+	    g.line(Coord.of(0, sz.y - 1), sz.sub(1, 1), 1);
+	    g.chcolor();
+	    super.draw(g);
+	}
 	if(!CFG.GUI_LOCK.get()) {
 	    Coord mh = moveHandleCoord();
 	    Coord ms = moveHandleSize();
@@ -1614,7 +1650,37 @@ public class ChatUI extends Widget {
 		g.aimage(t, Coord.of(sz.x / 2, Math.max(t.sz().y / 2, -UI.scale(2))), 0.5, 1.0);
 	    }
 	    g.chcolor();
+	    drawEditEye(g);
 	}
+    }
+
+    private Coord editEyeCoord() {
+	return Coord.of(Math.max(0, sz.x - editEyeSz.x - UI.scale(3)), UI.scale(3));
+    }
+
+    private boolean hitEditEye(Coord c) {
+	return !CFG.GUI_LOCK.get() && c.isect(editEyeCoord(), editEyeSz);
+    }
+
+    private void drawEditEye(GOut g) {
+	Coord ec = editEyeCoord();
+	Coord cen = ec.add(editEyeSz.div(2));
+	g.chcolor(12, 16, 10, 225);
+	g.frect(ec, editEyeSz);
+	g.chcolor(DraggableWidget.EDIT_LINE);
+	g.line(ec, ec.add(editEyeSz.x - 1, 0), 1);
+	g.line(ec, ec.add(0, editEyeSz.y - 1), 1);
+	g.line(ec.add(editEyeSz.x - 1, 0), ec.add(editEyeSz.x - 1, editEyeSz.y - 1), 1);
+	g.line(ec.add(0, editEyeSz.y - 1), ec.add(editEyeSz.x - 1, editEyeSz.y - 1), 1);
+	g.line(ec.add(UI.scale(3), editEyeSz.y / 2), cen, 1);
+	g.line(cen, ec.add(editEyeSz.x - UI.scale(3), editEyeSz.y / 2), 1);
+	g.chcolor(contentsVisible ? DraggableWidget.EDIT_ACTIVE : DraggableWidget.EDIT_PRECISION);
+	g.fellipse(cen, UI.scale(3, 3));
+	if(!contentsVisible) {
+	    g.chcolor(255, 148, 32, 255);
+	    g.line(ec.add(UI.scale(3), editEyeSz.y - UI.scale(3)), ec.add(editEyeSz.x - UI.scale(3), UI.scale(3)), 1);
+	}
+	g.chcolor();
     }
 
     private static final Resource notifsfx = Resource.local().loadwait("sfx/hud/chat");
@@ -1805,6 +1871,11 @@ public class ChatUI extends Widget {
 
     public boolean mousedown(MouseDownEvent ev) {
 	Coord c= ev.c;
+	if((ev.b == 1) && hitEditEye(c)) {
+	    contentsVisible = !contentsVisible;
+	    storeCfg();
+	    return(true);
+	}
 	ResizeHandle precision = hitPrecisionHandle(c);
 	if((ev.b == 1) && (precision != null)) {
 	    resizeHandle = precision;
@@ -1827,6 +1898,8 @@ public class ChatUI extends Widget {
 	    moff = c;
 	    customPosition = true;
 	    return(true);
+	} else if(!contentsVisible) {
+	    return(false);
 	} else {
 	    return(super.mousedown(ev));
 	}

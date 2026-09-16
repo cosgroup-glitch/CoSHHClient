@@ -24,6 +24,7 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
     private static final Coord MIN = UI.scale(220, 130);
     private static final int BUTTON_GAP = UI.scale(6);
     private static final int BUTTON_ROW = UI.scale(42);
+    private static final int CREDO_BUTTON_SIZE = UI.scale(34);
     private final Objectives body = add(new Objectives(), PAD);
     private final Frame bodyFrame = add(new Frame(Coord.z, false), PAD);
     private final QuestTabButton questButton = add(new QuestTabButton("quest", "Quest Log") {
@@ -36,6 +37,7 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	    openCredos();
 	}
     });
+    private final CurrentCredoButton currentCredoButton = add(new CurrentCredoButton());
     private GameUI gui;
     private int questid = -1;
     private QuestLogWindow questLog;
@@ -94,6 +96,7 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	int bx = Math.max(PAD.x, fc.x + bodyFrame.box.btloff().x + UI.scale(3));
 	questButton.move(Coord.of(bx, by));
 	credoButton.move(Coord.of(bx + questButton.sz.x + BUTTON_GAP, by));
+	currentCredoButton.move(Coord.of(credoButton.c.x + credoButton.sz.x + BUTTON_GAP, by));
     }
 
     public void resize(Coord sz) {
@@ -102,7 +105,9 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
     }
 
     private Coord buttonSize() {
-	return(Coord.of(questButton.sz.x + BUTTON_GAP + credoButton.sz.x, Math.max(questButton.sz.y, credoButton.sz.y)));
+	int w = questButton.sz.x + BUTTON_GAP + credoButton.sz.x + BUTTON_GAP + currentCredoButton.sz.x;
+	int h = Math.max(Math.max(questButton.sz.y, credoButton.sz.y), currentCredoButton.sz.y);
+	return(Coord.of(w, h));
     }
 
     private void openQuestLog() {
@@ -121,6 +126,24 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	}
 	credoLog.show();
 	credoLog.raise();
+    }
+
+    private SkillWnd.CredoGrid currentCredos() {
+	return((gui != null) && (gui.chrwdg != null) && (gui.chrwdg.skill != null)) ? gui.chrwdg.skill.credos : null;
+    }
+
+    private void loadCurrentCredoQuest() {
+	SkillWnd.CredoGrid grid = currentCredos();
+	if((grid == null) || (grid.pcr == null) || (grid.pqid < 0) || (gui == null) || (gui.chrwdg == null))
+	    return;
+	gui.chrwdg.wdgmsg("qsel", grid.pqid);
+    }
+
+    private String currentCredoProgress(int questid) {
+	SkillWnd.CredoGrid grid = currentCredos();
+	if((grid == null) || (grid.pcr == null) || (grid.pqid != questid))
+	    return null;
+	return String.format("Lv. %d/%d    Qt. %d/%d", grid.pcl, grid.pclt, grid.pcql, grid.pcqlt);
     }
 
     public void destroy() {
@@ -146,6 +169,148 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	}
     }
 
+    private class CurrentCredoButton extends Widget {
+	private SkillWnd.Credo last;
+	private Tex icon, upFrame, downFrame, hoverFrame;
+	private boolean down = false, hover = false;
+	private UI.Grab grab;
+
+	CurrentCredoButton() {
+	    super(Coord.of(CREDO_BUTTON_SIZE));
+	    settip("Load current credo quest objective");
+	}
+
+	private SkillWnd.CredoGrid grid() {
+	    return currentCredos();
+	}
+
+	private boolean active() {
+	    SkillWnd.CredoGrid grid = grid();
+	    return((grid != null) && (grid.pcr != null) && (grid.pqid >= 0));
+	}
+
+	private void update() {
+	    SkillWnd.CredoGrid grid = grid();
+	    SkillWnd.Credo cr = (grid == null) ? null : grid.pcr;
+	    if(cr != last) {
+		if(icon != null)
+		    icon.dispose();
+		icon = null;
+		last = cr;
+	    }
+	    if((icon == null) && (cr != null)) {
+		try {
+		    icon = new TexI(cr.res.get().flayer(Resource.imgc).img);
+		} catch(Loading ignored) {
+		}
+	    }
+	}
+
+	public void draw(GOut g) {
+	    update();
+	    Area cell = Area.sized(Coord.z, sz);
+	    drawCell(g, cell);
+	    Area clip = inner(cell);
+	    if(icon != null) {
+		Coord isz = icon.sz();
+		int w = clip.sz().x;
+		int h = Math.max(1, (isz.y * w) / Math.max(1, isz.x));
+		Coord dsz = Coord.of(w, h);
+		Coord ic = clip.ul.add(0, (clip.sz().y - h) / 2);
+		g.chcolor(255, 255, 255, active() ? 255 : 120);
+		g.image(icon, ic, clip.ul, clip.br, dsz);
+		g.chcolor();
+	    }
+	}
+
+	private Area inner(Area area) {
+	    int b = UI.scale(4);
+	    return(Area.corn(area.ul.add(b, b), area.br.sub(b, b)));
+	}
+
+	private void drawCell(GOut g, Area area) {
+	    Area in = inner(area);
+	    g.image(Window.bg, in.ul, in.sz());
+	    g.chcolor(0, 0, 0, 35);
+	    g.frect(in.ul, in.sz());
+	    g.chcolor();
+	    drawButtonBorder(g, area, buttonTex());
+	}
+
+	private Tex buttonTex() {
+	    if(upFrame == null)
+		upFrame = new TexI(questButton.up);
+	    if(downFrame == null)
+		downFrame = new TexI(questButton.down);
+	    if(hoverFrame == null)
+		hoverFrame = new TexI(questButton.hover);
+	    if(down && hover)
+		return(downFrame);
+	    if(hover || (grab != null))
+		return(hoverFrame);
+	    return(upFrame);
+	}
+
+	private void drawButtonBorder(GOut g, Area area, Tex tex) {
+	    int b = UI.scale(4);
+	    Coord tsz = tex.sz();
+	    Coord dsz = area.sz();
+	    drawSlice(g, tex, area.ul, Coord.z, Coord.of(b, b), Coord.of(b, b));
+	    drawSlice(g, tex, area.ul.add(b, 0), Coord.of(b, 0), Coord.of(tsz.x - b, b), Coord.of(Math.max(1, dsz.x - (b * 2)), b));
+	    drawSlice(g, tex, area.ul.add(dsz.x - b, 0), Coord.of(tsz.x - b, 0), Coord.of(tsz.x, b), Coord.of(b, b));
+	    drawSlice(g, tex, area.ul.add(0, b), Coord.of(0, b), Coord.of(b, tsz.y - b), Coord.of(b, Math.max(1, dsz.y - (b * 2))));
+	    drawSlice(g, tex, area.ul.add(dsz.x - b, b), Coord.of(tsz.x - b, b), Coord.of(tsz.x, tsz.y - b), Coord.of(b, Math.max(1, dsz.y - (b * 2))));
+	    drawSlice(g, tex, area.ul.add(0, dsz.y - b), Coord.of(0, tsz.y - b), Coord.of(b, tsz.y), Coord.of(b, b));
+	    drawSlice(g, tex, area.ul.add(b, dsz.y - b), Coord.of(b, tsz.y - b), Coord.of(tsz.x - b, tsz.y), Coord.of(Math.max(1, dsz.x - (b * 2)), b));
+	    drawSlice(g, tex, area.ul.add(dsz.x - b, dsz.y - b), Coord.of(tsz.x - b, tsz.y - b), tsz, Coord.of(b, b));
+	}
+
+	private void drawSlice(GOut g, Tex tex, Coord dc, Coord sul, Coord sbr, Coord dsz) {
+	    g.image(new TexSI(tex, sul, sbr), dc, dsz);
+	}
+
+	public boolean mousedown(MouseDownEvent ev) {
+	    if(ev.b == 1) {
+		down = true;
+		hover = ev.c.isect(Coord.z, sz);
+		grab = ui.grabmouse(this);
+		ui.sfx(Button.clbtdown.stream());
+		return true;
+	    }
+	    return false;
+	}
+
+	public boolean mouseup(MouseUpEvent ev) {
+	    if((grab != null) && (ev.b == 1)) {
+		grab.remove();
+		grab = null;
+		down = false;
+		hover = ev.c.isect(Coord.z, sz);
+		ui.sfx(Button.clbtup.stream());
+		if(hover)
+		    loadCurrentCredoQuest();
+		return true;
+	    }
+	    return false;
+	}
+
+	public void mousemove(MouseMoveEvent ev) {
+	    hover = ev.c.isect(Coord.z, sz);
+	}
+
+	public void destroy() {
+	    if(icon != null)
+		icon.dispose();
+	    if(upFrame != null)
+		upFrame.dispose();
+	    if(downFrame != null)
+		downFrame.dispose();
+	    if(hoverFrame != null)
+		hoverFrame.dispose();
+	    super.destroy();
+	}
+    }
+
     private class Objectives extends Widget {
 	private final Text.Foundry titlef = new Text.Foundry(Text.serif.deriveFont(java.awt.Font.BOLD), 16).aa(true);
 	private final Text.Foundry condf = new Text.Foundry(Text.sans, 12).aa(true);
@@ -154,6 +319,8 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	private QuestWnd.Quest.Condition[] conditions = {};
 	private Tex rtitle;
 	private Tex[] rcond = {};
+	private Tex rcredo;
+	private String credoText;
 	private int rwidth = -1;
 
 	public Objectives() {
@@ -183,6 +350,10 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 		w = Math.max(w, tex.sz().x);
 		h += tex.sz().y;
 	    }
+	    if(rcredo != null) {
+		w = Math.max(w, rcredo.sz().x);
+		h += UI.scale(4) + rcredo.sz().y;
+	    }
 	    return(Coord.of(w + UI.scale(2), h));
 	}
 
@@ -196,14 +367,20 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 		    tex.dispose();
 	    }
 	    rcond = new Tex[0];
+	    if(rcredo != null) {
+		rcredo.dispose();
+		rcredo = null;
+	    }
 	}
 
 	private void render() {
 	    int width = Math.max(UI.scale(60), sz.x - UI.scale(2));
-	    if((rtitle != null) && (rwidth == width))
+	    String nextCredoText = currentCredoProgress(questid);
+	    if((rtitle != null) && (rwidth == width) && Utils.eq(credoText, nextCredoText))
 		return;
 	    disposeTex();
 	    rwidth = width;
+	    credoText = nextCredoText;
 	    rtitle = titlef.renderwrap(title, width).tex();
 	    rcond = new Tex[conditions.length];
 	    for(int i = 0; i < conditions.length; i++) {
@@ -215,6 +392,8 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 		    (cond.status == null) ? "" : (" " + cond.status));
 		rcond[i] = condf.renderwrap(text, color, width).tex();
 	    }
+	    if(credoText != null)
+		rcredo = Text.renderstroked(credoText, Color.WHITE, Color.BLACK, QuestWnd.Quest.QView.qcfnd).tex();
 	}
 
 	public void resize(Coord sz) {
@@ -236,6 +415,7 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	}
 
 	public void draw(GOut g) {
+	    render();
 	    int y = 0;
 	    if(rtitle != null) {
 		g.image(rtitle, Coord.of(UI.scale(1), y));
@@ -244,6 +424,10 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	    for(Tex tex : rcond) {
 		g.image(tex, Coord.of(UI.scale(1), y));
 		y += tex.sz().y;
+	    }
+	    if(rcredo != null) {
+		y += UI.scale(4);
+		g.image(rcredo, Coord.of(UI.scale(1), y));
 	    }
 	}
 
@@ -1092,4 +1276,3 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	}
     }
 }
-

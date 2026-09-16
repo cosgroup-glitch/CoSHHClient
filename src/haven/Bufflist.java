@@ -28,7 +28,7 @@ package haven;
 
 import java.util.*;
 
-public class Bufflist extends Widget {
+public class Bufflist extends DraggableWidget {
     public static final int margin = UI.scale(2);
     public static final int num = 5;
 
@@ -37,7 +37,12 @@ public class Bufflist extends Widget {
     }
 
     public Bufflist() {
-        super(Buff.cframe.sz());
+	this(null);
+    }
+
+    public Bufflist(String name) {
+        super(name == null ? null : "Bufflist:" + name);
+	resize(Buff.cframe.sz());
     }
 
     private void arrange(Widget imm) {
@@ -83,11 +88,16 @@ public class Bufflist extends Widget {
     }
 
     public void draw(GOut g) {
+	if(!contentsVisible()) {
+	    drawEditOverlay(g);
+	    return;
+	}
 	for(Widget wdg = child, next; wdg != null; wdg = next) {
 	    next = wdg.next;
 	    if(!wdg.visible || !(wdg instanceof Managed))
 		continue;
 	    wdg.draw(g.reclipl(xlate(wdg.c, true), wdg.sz));
 	}
+	drawEditOverlay(g);
     }
 }

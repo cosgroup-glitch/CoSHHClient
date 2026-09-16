@@ -415,6 +415,39 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	
 	public KeyBinding binding() {return(kb_back);}
     };
+
+    private static final Resource toggleIcon = Resource.remote().loadwait("ui/pag/toggle");
+    private static final Resource.Image toggleOn = toggleIcon.layer(Resource.imgc, 0);
+    private static final Resource.Image toggleOff = toggleIcon.layer(Resource.imgc, 1);
+    private final Pagina mazesStuff = syntheticPagina("Maze'sStuff", "paginae/add/mazesstuff", null, null, null);
+    private final Pagina mazeCombatMode = syntheticPagina("Combat mode", "paginae/add/mazesstuff/combat_mode", mazesStuff, () -> ConfigProfiles.activate(ConfigProfiles.Mode.COMBAT), () -> ConfigProfiles.active() == ConfigProfiles.Mode.COMBAT);
+    private final Pagina mazeCameraMode = syntheticPagina("Camera Mode", "paginae/add/mazesstuff/camera_mode", mazesStuff, () -> ConfigProfiles.activate(ConfigProfiles.Mode.CAMERA), () -> ConfigProfiles.active() == ConfigProfiles.Mode.CAMERA);
+    private final Pagina mazeBuilderMode = syntheticPagina("Builder Mode", "paginae/add/mazesstuff/builder_mode", mazesStuff, () -> ConfigProfiles.activate(ConfigProfiles.Mode.BUILDER), () -> ConfigProfiles.active() == ConfigProfiles.Mode.BUILDER);
+    private final Pagina mazeDefaultMode = syntheticPagina("Default", "paginae/add/mazesstuff/default", mazesStuff, () -> ConfigProfiles.activate(ConfigProfiles.Mode.DEFAULT), () -> ConfigProfiles.active() == ConfigProfiles.Mode.DEFAULT);
+    private final Pagina mazeSendPings = syntheticPagina("Send Pings", "paginae/add/mazesstuff/default", mazesStuff, () -> CFG.MAZES_SEND_PINGS.set(!CFG.MAZES_SEND_PINGS.get()), CFG.MAZES_SEND_PINGS::get);
+    private final Pagina mazeTargetClosest = syntheticPagina("Target Closest", "paginae/add/mazesstuff/combat_mode", mazesStuff, () -> CFG.MAZES_TARGET_CLOSEST_COMBAT.set(!CFG.MAZES_TARGET_CLOSEST_COMBAT.get()), CFG.MAZES_TARGET_CLOSEST_COMBAT::get);
+
+    private Pagina syntheticPagina(String name, String resname, Pagina parent, Runnable action, Supplier<Boolean> active) {
+	Pagina pag = new Pagina(this, name, Resource.local().loadwait(resname).indir());
+	pag.button(new PagButton(pag) {
+	    public String name() {return name;}
+	    public String originalName() {return name;}
+	    public String sortkey() {return parent == null ? "\0" + name : name;}
+	    public Pagina parent() {return parent;}
+	    public KeyBinding binding() {return KeyBinding.get("scm/maze/" + name, KeyMatch.nil);}
+	    public void drawmain(GOut g, GSprite spr) {
+		super.drawmain(g, spr);
+		if(active != null)
+		    g.image(active.get() ? toggleOn : toggleOff, Coord.z);
+	    }
+	    public void use(Interaction iact) {
+		if(action != null)
+		    action.run();
+		change(null);
+	    }
+	});
+	return pag;
+    }
     
     public Pagina paginafor(Indir<Resource> res) {
 	if(res == null)
@@ -483,6 +516,16 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	    } catch(Loading e) {
 		ret = false;
 	    }
+	}
+	if(p == null) {
+	    buf.add(mazesStuff);
+	} else if(p == mazesStuff) {
+	    buf.add(mazeCombatMode);
+	    buf.add(mazeCameraMode);
+	    buf.add(mazeBuilderMode);
+	    buf.add(mazeDefaultMode);
+	    buf.add(mazeSendPings);
+	    buf.add(mazeTargetClosest);
 	}
 	return(ret);
     }
@@ -768,7 +811,7 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
     public static final KeyBinding kb_back = KeyBinding.get("scm-back", KeyMatch.forcode(KeyEvent.VK_BACK_SPACE, 0));
     public static final KeyBinding kb_next = KeyBinding.get("scm-next", KeyMatch.forchar('N', KeyMatch.S | KeyMatch.C | KeyMatch.M, KeyMatch.S));
     public boolean globtype(GlobKeyEvent ev) {
-	if(disableMenuKeysInCombat())
+	if(menuKeysDisabled())
 	    return(super.globtype(ev));
 	if(kb_root.key().match(ev) && (this.cur != null)) {
 	    change(null);
@@ -800,8 +843,9 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	return(super.globtype(ev));
     }
 
-    private boolean disableMenuKeysInCombat() {
-	return(CFG.DISABLE_MENU_KEYS_IN_COMBAT.get() && (ui != null) && (ui.gui != null) && ui.gui.isInCombat());
+    private boolean menuKeysDisabled() {
+	return(CFG.DISABLE_MENU_KEYS.get() ||
+	       (CFG.DISABLE_MENU_KEYS_IN_COMBAT.get() && (ui != null) && (ui.gui != null) && ui.gui.isInCombat()));
     }
     
     private void selectCraft(Pagina r) {

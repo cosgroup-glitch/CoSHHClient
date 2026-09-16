@@ -649,6 +649,7 @@ public class Resource implements Serializable {
 		    Resource ret = new Resource(this, res.name, res.ver);
 		    ret.source = src;
 		    ret.load(msg);
+		    ModelDiscovery.loaded(ret);
 		    res.res = ret;
 		    res.error = null;
 		    break;

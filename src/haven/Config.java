@@ -40,6 +40,7 @@ import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.function.*;
+import java.util.stream.Stream;
 
 public class Config {
     public static final boolean iswindows = System.getProperty("os.name").startsWith("Windows");
@@ -108,11 +109,68 @@ public class Config {
 	    if(base != null) {
 		File file = new File(base + File.separator + "kami-client");
 		file.mkdirs();
+		migrateLegacyHome(file);
 		return file.getAbsoluteFile();
 	    }
 	}
 	
 	return new File("").getAbsoluteFile();
+    }
+
+    private static void migrateLegacyHome(File home) {
+	File legacy = new File("").getAbsoluteFile();
+	if(legacy.equals(home))
+	    return;
+	File marker = new File(home, ".workdir-migrated");
+	if(marker.exists())
+	    return;
+	File[] files = legacy.listFiles();
+	if(files == null)
+	    return;
+	for(File file : files) {
+	    String name = file.getName();
+	    if(file.isFile() && name.endsWith(".json")) {
+		copyLegacy(file, new File(home, name));
+	    } else if(file.isDirectory() && name.startsWith("world-")) {
+		copyLegacy(file, new File(home, name));
+	    }
+	}
+	try {
+	    marker.createNewFile();
+	} catch(IOException ignored) {
+	}
+    }
+
+    private static void copyLegacy(File src, File dst) {
+	if(dst.exists())
+	    return;
+	try {
+	    if(src.isDirectory()) {
+		try(Stream<Path> paths = Files.walk(src.toPath())) {
+		    paths.forEach(path -> {
+			try {
+			    Path rel = src.toPath().relativize(path);
+			    Path to = dst.toPath().resolve(rel);
+			    if(Files.isDirectory(path)) {
+				Files.createDirectories(to);
+			    } else if(!Files.exists(to)) {
+				Path parent = to.getParent();
+				if(parent != null)
+				    Files.createDirectories(parent);
+				Files.copy(path, to);
+			    }
+			} catch(IOException ignored) {
+			}
+		    });
+		}
+	    } else {
+		File parent = dst.getParentFile();
+		if(parent != null)
+		    parent.mkdirs();
+		Files.copy(src.toPath(), dst.toPath());
+	    }
+	} catch(IOException ignored) {
+	}
     }
     
     public static File getFile(String name) {

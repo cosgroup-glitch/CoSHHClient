@@ -92,6 +92,8 @@ public class ResizableDraggableWidget extends DraggableWidget {
 
     @Override
     public boolean mousedown(MouseDownEvent ev) {
+	if((ev.b == 1) && hitEye(ev.c))
+	    return super.mousedown(ev);
 	if(ev.b == 1) {
 	    Handle precision = hitPrecisionHandle(ev.c);
 	    if(precision != null) {

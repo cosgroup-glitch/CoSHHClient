@@ -36,6 +36,7 @@ import me.ender.gob.KinInfo;
 import me.ender.gob.GobCombatInfo;
 import me.ender.minimap.AutoMarkers;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -66,6 +67,9 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     private final Object removalLock = new Object();
     private GobDamageInfo damage;
     private HidingGobSprite<Hitbox> hitbox = null;
+    private Overlay partyMarkOverlay = null;
+    private Overlay attackRangeOverlay = null;
+    private double attackRangeRadius = Double.NaN;
     public Drawable drawable;
     public Moving moving;
     private Boolean isMe = null;
@@ -533,6 +537,8 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	setattr(info);
 	updwait(this::drawableUpdated, waiting -> {});
 	GobCombatInfo.check(this);
+	if(id >= 0)
+	    glob.party.applyTargetMarker(this);
     }
     
     public Gob(Glob glob, Coord2d c) {
@@ -906,6 +912,20 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	    }
 	}
 	return false;
+    }
+
+    public java.util.List<String> equippedOverlayResNames() {
+	java.util.List<String> ret = new ArrayList<>();
+	synchronized (ols) {
+	    for(Overlay ol : ols) {
+		if(!Reflect.is(ol.spr, "haven.res.gfx.fx.eq.Equed"))
+		    continue;
+		AnimSprite espr = Reflect.getFieldValue(ol.spr, "espr", AnimSprite.class);
+		if(espr != null && espr.res != null)
+		    ret.add(espr.res.name);
+	    }
+	}
+	return ret;
     }
     
     public Placer placer() {
@@ -1421,6 +1441,26 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	}
 	h.start();
     }
+
+    public void addTargetMarker(Party.TargetMark targetMarker) {
+	try {
+	    removeTargetMarker();
+	    Resource.Image rimg = Resource.local().loadwait(targetMarker.resPath).layer(Resource.imgc);
+	    BufferedImage buf = PUtils.rasterimg(PUtils.blurmask2(rimg.img.getRaster(), 4, 1, Color.BLACK));
+	    partyMarkOverlay = new Overlay(this, new haven.sprites.PartyMarkSprite(this, new TexI(buf)));
+	    addol(partyMarkOverlay);
+	} catch(Exception ignored) {}
+    }
+
+    public void removeTargetMarker() {
+	try {
+	    if(partyMarkOverlay != null) {
+		partyMarkOverlay.remove();
+		partyMarkOverlay.spr.dispose();
+		partyMarkOverlay = null;
+	    }
+	} catch(Exception ignored) {}
+    }
     
     public String tooltip() {
 	String tt = null;
@@ -1732,6 +1772,10 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	if(status.updated(StatusType.tags, StatusType.color, StatusType.marker)) {
 	    updateMarkerSprite();
 	}
+
+	if(status.updated(StatusType.tags, StatusType.overlay, StatusType.combat, StatusType.id, StatusType.marker)) {
+	    updateAttackRangeOverlay();
+	}
 	
 	if(status.updated(StatusType.tags, StatusType.info, StatusType.color)) {
 	    updateColor();
@@ -1739,6 +1783,38 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	
 	if(status.updated(StatusType.map_marker, StatusType.id)) {
 	    markGob();
+	}
+    }
+
+    private void updateAttackRangeOverlay() {
+	GameUI gui = context(GameUI.class);
+	boolean show = false;
+	if(gui != null && gui.isInCombat()) {
+	    boolean me = Boolean.TRUE.equals(isMe());
+	    boolean party = is(GobTag.PARTY);
+	    boolean enemy = !me && !party && is(GobTag.IN_COMBAT);
+	    show = (me && CFG.SHOW_ATTACK_RANGE_SELF.get()) ||
+		(!me && party && CFG.SHOW_ATTACK_RANGE_PARTY.get()) ||
+		(enemy && CFG.SHOW_ATTACK_RANGE_ENEMY.get());
+	}
+	double radius = show ? CombatWeaponRange.rawGobRange(this) : Double.NaN;
+	if(Double.isNaN(radius) || radius <= 0) {
+	    removeAttackRangeOverlay();
+	    return;
+	}
+	if(attackRangeOverlay != null && Math.abs(attackRangeRadius - radius) < 0.01)
+	    return;
+	removeAttackRangeOverlay();
+	attackRangeRadius = radius;
+	attackRangeOverlay = new Overlay(this, new haven.sprites.AttackRangeSprite(this, radius));
+	addol(attackRangeOverlay);
+    }
+
+    private void removeAttackRangeOverlay() {
+	if(attackRangeOverlay != null) {
+	    attackRangeOverlay.remove();
+	    attackRangeOverlay = null;
+	    attackRangeRadius = Double.NaN;
 	}
     }
     
