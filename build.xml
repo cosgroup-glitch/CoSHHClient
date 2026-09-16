@@ -277,12 +277,13 @@
   <target name="dist" depends="bin">
     <mkdir dir="dist" />
     <zip destfile="dist/KamisLabyrinthClient.zip">
-      <fileset dir="." includes="run-kami-bin.bat" />
+      <fileset dir="." includes="run-kami-bin.bat,KamisLabyrinthClient.bat" />
       <zipfileset dir="bin" prefix="bin">
 	<include name="*.jar" />
 	<include name="haven-config.properties" />
       </zipfileset>
     </zip>
+    <copy file="Install-KamisLabyrinthClient.bat" todir="dist" />
     <checksum file="dist/KamisLabyrinthClient.zip" property="dist.sha256" algorithm="SHA-256" />
     <echo file="dist/update.json">{
   "version": "${version}",

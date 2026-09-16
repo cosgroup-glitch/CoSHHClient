@@ -40,10 +40,16 @@ For normal public releases, create and push a version tag:
     git push origin v0.1.0
 
 GitHub Actions will build the package and publish a GitHub Release with
-`KamisLabyrinthClient.zip' and `update.json'. Users should download the
-zip from the latest release page, extract it, and run `run-kami-bin.bat'.
-After that, startup update checks will download newer release packages
-when the version in `update.json' changes.
+`Install-KamisLabyrinthClient.bat', `KamisLabyrinthClient.zip', and
+`update.json'. New users should download `Install-KamisLabyrinthClient.bat'
+from the latest release page and run it. The installer downloads the
+latest zip, verifies it, installs the client into the user's LocalAppData
+folder, creates shortcuts, and starts the client.
+
+Users who prefer a portable install can download `KamisLabyrinthClient.zip',
+extract it, and run `KamisLabyrinthClient.bat'. After either install path,
+startup update checks will download newer release packages when the version
+in `update.json' changes.
 
 			    Getting a copy
 
