@@ -129,8 +129,6 @@ public class CustomOptPanels {
 	panel.add(new CFGBox("Use new combat UI", CFG.ALT_COMBAT_UI), x, y);
 	
 	y += STEP;
-	panel.add(new CFGBox("Allow dragging combat UI", CFG.DRAG_COMBAT_UI, "Drag by cooldown circle"), x, y);
-	y += STEP;
 	panel.add(new CFGBox("Show combat UI even when not in combat", CFG.KEEP_COMBAT_UI_AFTER_COMBAT), x, y);
 	y += STEP;
 	Label inactiveScale = panel.add(new Label(String.format("Out of combat combat UI scale: %d%%", CFG.COMBAT_UI_INACTIVE_SCALE.get())), x + H_STEP, y);
@@ -312,6 +310,8 @@ public class CustomOptPanels {
 	    super(w, label(), false);
 	    action(() -> {
 		CFG.GUI_LOCK.set(!CFG.GUI_LOCK.get());
+		if(!CFG.GUI_LOCK.get())
+		    CFG.KEEP_COMBAT_UI_AFTER_COMBAT.set(true);
 		update();
 	    });
 	    CFG.GUI_LOCK.observe(this);

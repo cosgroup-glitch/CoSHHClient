@@ -59,7 +59,6 @@ public class OptWnd extends WindowX {
     public static final Text.Foundry LBL_FNT = new Text.Foundry(sans, 14);
     public Panel current;
     private WidgetList<KeyBinder.ShortcutWidget> shortcutList;
-    private AlarmWindow alarmWindow;
 
     public void chpanel(Panel p) {
 	if(current != null)
@@ -895,7 +894,6 @@ public class OptWnd extends WindowX {
 	addPanelButton("Map upload", 'm', mapping, colum, row++);
 	addPanelButton("Automation settings", 't', automation, colum, row++);
 	addPanelButton("Experimental", 'x', experimental, colum, row++);
-	main.add(new Button(UI.scale(200), "Alarms", false).action(this::toggleAlarmWindow), UI.scale(PANEL_POS.mul(colum, row++)));
 	main.add(CustomOptPanels.guiLockButton(UI.scale(200)), UI.scale(PANEL_POS.mul(colum, row++)));
 
 	int y = 0;
@@ -964,20 +962,6 @@ public class OptWnd extends WindowX {
 
     private void addPanelButton(String name, char key, Action action, int x, int y) {
 	main.add(new AButton(UI.scale(200), name, key, action), UI.scale(PANEL_POS.mul(x, y)));
-    }
-
-    private void toggleAlarmWindow() {
-	if(alarmWindow == null || alarmWindow.parent == null) {
-	    GameUI gui = getparent(GameUI.class);
-	    if(gui == null)
-		return;
-	    alarmWindow = gui.add(new AlarmWindow());
-	    alarmWindow.show();
-	} else {
-	    alarmWindow.show(!alarmWindow.visible);
-	}
-	if(alarmWindow.visible)
-	    alarmWindow.raise();
     }
 
     private void initCameraPanel() {
@@ -1675,16 +1659,12 @@ public class OptWnd extends WindowX {
 	panel.add(mappingLabel, x, y);
 	y += STEP;
 
-	String automapEndpoint = CFG.AUTOMAP_ENDPOINT.get();
-	if (automapEndpoint == null || automapEndpoint.isEmpty()) {
-	    automapEndpoint = "{input map key here}";
-	}
+	String automapEndpoint = CFG.hasCustomAutomapEndpoint() ? CFG.AUTOMAP_ENDPOINT.get().trim() : "";
 	TextEntry map_url = new TextEntry(UI.scale(250), automapEndpoint) {
 	    @Override
 	    public boolean keyup(KeyUpEvent ev) {
 		if(!parent.visible)
 		    return false;
-		CFG.AUTOMAP_ENDPOINT.set(text());
 		return false;
 	    }
 	};
@@ -1708,8 +1688,6 @@ public class OptWnd extends WindowX {
 			// Clipboard contains text
 			String clipboardText = (String) contents.getTransferData(DataFlavor.stringFlavor);
 			map_url.settext(clipboardText);
-			CFG.AUTOMAP_ENDPOINT.set(clipboardText);
-			System.out.println("Clipboard content: " + clipboardText);
 		    }
 		    else {
 			System.out.println("Clipboard does not contain text");
@@ -1767,10 +1745,21 @@ public class OptWnd extends WindowX {
 		    automapper.setGenus(ui.sess.user.genus);
 		    if (setUsername)
 			automapper.SetPlayerName(ui.sess.user.name);
-		    automapper.SetEndpoint(CFG.AUTOMAP_ENDPOINT.get());
-		    automapper.EnableGridUploads(CFG.AUTOMAP_UPLOAD.get());
-		    automapper.EnableTracking(CFG.AUTOMAP_TRACK.get());
-		    mappingLabel.settext("Mapping URL: " + (automapper.CheckEndpoint() ? "Valid" : "Invalid"));
+		    String acceptedEndpoint = automapper.GetEndpoint();
+		    boolean acceptedCustomEndpoint = automapper.UsesCustomEndpoint();
+		    String candidate = map_url.text().trim();
+		    automapper.SetEndpoint(candidate);
+		    boolean valid = !candidate.isEmpty() && automapper.CheckEndpoint();
+		    if(valid) {
+			boolean customEndpoint = !candidate.equals(CFG.DEFAULT_AUTOMAP_ENDPOINT);
+			CFG.AUTOMAP_ENDPOINT.set(customEndpoint ? candidate : "");
+			automapper.SetEndpoint(candidate, customEndpoint);
+			mappingLabel.settext("Mapping URL: Valid");
+		    } else {
+			automapper.SetEndpoint(acceptedEndpoint, acceptedCustomEndpoint);
+			mappingLabel.settext("Mapping URL: Invalid");
+		    }
+		    automapper.ApplyEndpointSettings();
 		} catch (Exception ex) {}
 
 	    }

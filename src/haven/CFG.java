@@ -196,8 +196,19 @@ public class CFG<T> {
     public static final CFG<Boolean> AUTOMAP_UPLOAD_MARKERS = new CFG<>("automap.upload_markers", false);
     public static final CFG<Boolean> AUTOMAP_TRACK = new CFG<>("automap.track", false);
     public static final CFG<Boolean> AUTOFOOD_TRACK = new CFG<>("autofood.track", false);
+    public static final String DEFAULT_AUTOMAP_ENDPOINT = "https://cos.hearthworld.com/client/a232a0682b244e8cf8dd4fdc35b1f6b5ee2e8757";
     public static final CFG<Set<BuddyWnd.Group>> AUTOMAP_MARKERS = new CFG<>("automap.markers", new HashSet<>(), new TypeToken<Set<BuddyWnd.Group>>(){});
     public static final CFG<String> AUTOMAP_ENDPOINT = new CFG<>("automap.andpoint", "");
+
+    public static String automapEndpoint() {
+	String endpoint = AUTOMAP_ENDPOINT.get();
+	return (endpoint == null || endpoint.trim().isEmpty()) ? DEFAULT_AUTOMAP_ENDPOINT : endpoint.trim();
+    }
+
+    public static boolean hasCustomAutomapEndpoint() {
+	String endpoint = AUTOMAP_ENDPOINT.get();
+	return endpoint != null && !endpoint.trim().isEmpty() && !endpoint.trim().equals(DEFAULT_AUTOMAP_ENDPOINT);
+    }
     
     public static final CFG<Boolean> ALWAYS_SHOW_DEWY_TIME = new CFG<>("addstg.always_show_dewy_time", false);
     public static final CFG<Boolean> SHOW_TIME = new CFG<>("addstg.show_time", false);

@@ -12,6 +12,7 @@ public class WidgetCfg {
     private static final Gson gson;
     private static final String CONFIG_JSON = "windows.json";
     public static final Map<String, WidgetCfg> CFG;
+    private static final Map<String, WidgetCfg> DEFAULTS;
     
     public Coord c, sz;
     private HashMap<String, Object> data;
@@ -29,6 +30,14 @@ public class WidgetCfg {
 	    tmp = new HashMap<>();
 	}
 	CFG = tmp;
+	Map<String, WidgetCfg> defaults = null;
+	try {
+	    Type type = new TypeToken<Map<String, WidgetCfg>>() {
+	    }.getType();
+	    defaults = gson.fromJson(Config.loadJarFile(CONFIG_JSON), type);
+	} catch(Exception ignored) {
+	}
+	DEFAULTS = defaults == null ? new HashMap<>() : defaults;
     }
     
     public WidgetCfg() {}
@@ -54,6 +63,10 @@ public class WidgetCfg {
     
     public static synchronized WidgetCfg get(String name) {
 	return name != null ? new WidgetCfg(CFG.get(name)) : null;
+    }
+
+    public static synchronized WidgetCfg getDefault(String name) {
+	return name != null ? new WidgetCfg(DEFAULTS.get(name)) : null;
     }
     
     public static synchronized void set(String name, WidgetCfg cfg) {

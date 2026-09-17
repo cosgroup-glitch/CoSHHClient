@@ -483,8 +483,18 @@ public class MiniMap extends Widget {
 	    this.z = icon.z();
 	    this.stime = ui.lasttick;
 	    this.conf = conf;
-	    if(this.notify = conf.notify)
+	    String alarmResource = gob.resid();
+	    if(AlarmManager.has(alarmResource)) {
+		this.notify = AlarmManager.enabled(alarmResource, conf.notify);
+		this.snotify = null;
+	    } else if(AlarmManager.resourceForIcon(conf.id.res, conf.icon.name()) != null) {
+		/* A different object (for example, a dungeon entrance) can share an
+		 * animal's map icon. Only an exact alarm resource may use its sound. */
+		this.notify = false;
+		this.snotify = null;
+	    } else if(this.notify = conf.notify) {
 		this.snotify = conf.notification();
+	    }
 	}
 
 	public void update(Coord2d rc, double ang) {
@@ -1341,11 +1351,24 @@ public class MiniMap extends Widget {
     private Location dsloc;
     private DisplayIcon dsicon;
     private DisplayMarker dsmark;
+    private double lastRightClick = 0;
+    private Coord lastRightClickCoord = null;
     public boolean mousedown(MouseDownEvent ev) {
 	dsloc = xlate(ev.c);
 	if(dsloc != null) {
-	    if(ev.b == 3 && ui.modmeta && sendPartyMapPing(dsloc))
-		return true;
+	    if(ev.b == 3) {
+		double now = Utils.rtime();
+		boolean doubleClick = (lastRightClickCoord != null) && ((now - lastRightClick) <= 0.4) &&
+		    (ev.c.dist(lastRightClickCoord) <= UI.scale(8));
+		lastRightClick = doubleClick ? 0 : now;
+		lastRightClickCoord = doubleClick ? null : ev.c;
+		if(doubleClick && sendPartyMapPing(dsloc)) {
+		    dsloc = null;
+		    dsicon = null;
+		    dsmark = null;
+		    return true;
+		}
+	    }
 	    dsicon = iconat(ev.c);
 	    dsmark = markerat(dsloc.tc);
 	    if((dsicon != null) && clickicon(dsicon, dsloc, ev.b, true))
@@ -1375,8 +1398,11 @@ public class MiniMap extends Widget {
     private boolean sendPartyMapPing(Location loc) {
 	if((sessloc == null) || (loc == null) || (loc.seg != sessloc.seg))
 	    return false;
-	Coord2d offset = loc.tc.sub(sessloc.tc).mul(tilesz).add(tilesz.div(2));
-	ChatCommands.sendPartyMapPing(ui, offset.floor());
+	Gob player = ui.gui.map.player();
+	if((player == null) || (player.rc == null))
+	    return false;
+	Coord2d clickloc = loc.tc.sub(sessloc.tc).mul(tilesz).add(tilesz.div(2));
+	ChatCommands.sendPartyMapPing(ui, clickloc.sub(player.rc).floor());
 	return true;
     }
 

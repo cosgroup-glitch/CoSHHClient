@@ -770,6 +770,30 @@ public class GobIcon extends GAttrib {
 	private <T> Consumer<T> andsave(Consumer<T> main) {
 	    return(val -> {main.accept(val); conf.dsave();});
 	}
+
+	private String alarmResource(Setting setting) {
+	    return(AlarmManager.resourceForIcon(setting.id.res, setting.icon.name()));
+	}
+
+	private String selectedResource(Setting setting) {
+	    String resource = alarmResource(setting);
+	    if(resource == null)
+		resource = Radar.gobForIcon(setting.id.res);
+	    return(resource == null ? setting.id.res : resource);
+	}
+
+	private boolean alarmEnabled(Setting setting) {
+	    String resource = alarmResource(setting);
+	    return(resource != null && AlarmManager.enabled(resource, false));
+	}
+
+	private void setAlarmEnabled(Setting setting, boolean enabled) {
+	    setting.notify = enabled;
+	    String resource = selectedResource(setting);
+	    if(enabled)
+		AlarmManager.ensure(resource, setting.icon.name());
+	    AlarmManager.setEnabled(resource, enabled);
+	}
     
 	private static final Text.Foundry elf = CharWnd.attrf;
 	private static final int elh = elf.height() + UI.scale(2);
@@ -787,7 +811,7 @@ public class GobIcon extends GAttrib {
 		public IconLine(Coord sz, ListIcon icon) {
 		    super(IconList.this, sz, icon);
 		    Widget prev;
-		    prev = adda(new CheckBox("").state(() -> icon.conf.notify).set(andsave(val -> icon.conf.notify = val)).settip("Notify"),
+		    prev = adda(new CheckBox("").state(() -> alarmEnabled(icon.conf)).set(andsave(val -> setAlarmEnabled(icon.conf, val))).settip("Notify"),
 				sz.x - UI.scale(2) - (sz.y / 2), sz.y / 2, 0.5, 0.5);
 		    prev = adda(new CheckBox("").state(() -> icon.conf.show).set(andsave(val -> {icon.conf.show = val;updateAllCheckbox();})).settip("Display"),
 				prev.c.x - UI.scale(2) - (sz.y / 2), sz.y / 2, 0.5, 0.5);
@@ -864,23 +888,39 @@ public class GobIcon extends GAttrib {
 
 	public class IconSettings extends Widget {
 	    public final Setting conf;
-	    public final NotifBox nb;
 
 	    public IconSettings(int w, Setting conf) {
 		super(Coord.z);
 		this.conf = conf;
 		Widget prev = add(new CheckBox("Display").state(() -> conf.show).set(andsave(val -> conf.show = val)),
 				  0, 0);
-		add(new CheckBox("Notify").state(() -> conf.notify).set(andsave(val -> conf.notify = val)),
+		add(new CheckBox("Notify").state(() -> alarmEnabled(conf)).set(andsave(val -> setAlarmEnabled(conf, val))),
 		    w / 2, 0);
-		Button pb = new Button(UI.scale(50), "Play") {
-			protected void depress() {}
-			protected void unpress() {}
-			public void click() {play();}
-		    };
-		prev = add(new Label("Sound to play on notification:"), prev.pos("bl").adds(0, 5));
-		nb = new NotifBox(w - pb.sz.x - UI.scale(15));
-		addhl(prev.pos("bl").adds(0, 2), w, prev = Frame.with(nb, false), pb);
+		String resource = selectedResource(conf);
+		prev = add(new Label("Notification sound:"), prev.pos("bl").adds(0, 7));
+		AlarmSoundBox sound = new AlarmSoundBox(w - UI.scale(85),
+		    AlarmManager.has(resource) ? AlarmManager.sound(resource) : "res:sfx/hud/mmap/bell1", value -> {
+			AlarmManager.ensure(resource, conf.icon.name());
+			AlarmManager.setSound(resource, value);
+			conf.notify = true;
+			SettingsWindow.this.conf.dsave();
+		    });
+		prev = add(sound, prev.pos("bl").adds(0, 3));
+		add(new Button(UI.scale(80), "Preview") {
+		    public void click() {
+			AlarmManager.preview(sound.value(), AlarmManager.volume(resource, 50), ui);
+		    }
+		}, prev.pos("ur").adds(5, 0));
+		prev = add(new Label("Volume:"), prev.pos("bl").adds(0, 8));
+		prev = add(new HSlider(w - UI.scale(60), 0, 100, AlarmManager.volume(resource, 50)) {
+		    public void changed() {
+			AlarmManager.ensure(resource, conf.icon.name());
+			AlarmManager.setVolume(resource, val);
+			conf.notify = true;
+			SettingsWindow.this.conf.dsave();
+			super.changed();
+		    }
+		}, prev.pos("ur").adds(10, 1));
 		if(conf.getmarkablep()) {
 		    add(new CheckBox("Place permanent marker")
 			.state(() -> conf.markset ? conf.mark : conf.getmarkp())
@@ -888,70 +928,6 @@ public class GobIcon extends GAttrib {
 			prev.pos("bl").adds(0, 5));
 		}
 		pack();
-	    }
-
-	    public class NotifBox extends SDropBox<NotificationSetting, Widget> {
-		private final List<NotificationSetting> items = new ArrayList<>();
-
-		public NotifBox(int w) {
-		    super(w, UI.scale(160), UI.scale(20));
-		    items.add(NotificationSetting.nil);
-		    for(NotificationSetting notif : NotificationSetting.builtin)
-			items.add(notif);
-		    if(conf.filens != null)
-			items.add(new NotificationSetting(conf.filens));
-		    items.add(NotificationSetting.other);
-		    for(NotificationSetting item : items) {
-			if(item.act(conf)) {
-			    change(item);
-			    break;
-			}
-		    }
-		}
-
-		protected List<NotificationSetting> items() {return(items);}
-		protected Widget makeitem(NotificationSetting item, int idx, Coord sz) {return(SListWidget.TextItem.of(sz, Text.std, () -> item.name));}
-
-		private void selectwav(NotificationSetting prev) {
-		    FilePicker dialog = ui.wnd.toolkit().picker().make(FilePicker.Mode.OPEN, ui.wnd);
-		    dialog.filter("PCM wave file", "wav");
-		    dialog.show().map(path -> {
-			Debug.dump(path, prev.name);
-			if(path == null) {
-			    super.change(prev);
-			} else {
-			    for(Iterator<NotificationSetting> i = items.iterator(); i.hasNext();) {
-				NotificationSetting item = i.next();
-				if(item.wav != null)
-				    i.remove();
-			    }
-			    NotificationSetting ws = new NotificationSetting(path);
-			    items.add(items.indexOf(NotificationSetting.other), ws);
-			    change(ws);
-			}
-		    }).report(ui);
-		}
-
-		public void change(NotificationSetting item) {
-		    NotificationSetting prev = sel;
-		    super.change(item);
-		    if(item == NotificationSetting.other) {
-			selectwav(prev);
-		    } else {
-			conf.resns = item.res;
-			conf.filens = item.wav;
-			SettingsWindow.this.conf.dsave();
-		    }
-		}
-	    }
-
-	    private void play() {
-		NotificationSetting sel = nb.sel;
-		if(sel == null) sel = NotificationSetting.nil;
-		if(sel.res != null)
-		    resnotif(sel.res).accept(ui);
-		else if(sel.wav != null)
-		    wavnotif(sel.wav).accept(ui);
 	    }
 	}
 

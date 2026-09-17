@@ -72,7 +72,8 @@ public class BackCache<K, V> {
 	if(cache.containsKey(key))
 	    return(cache.get(key));
 	V ret = load.apply(key);
-	cache.put(key, ret);
+	if(ret != null)
+	    cache.put(key, ret);
 	return(ret);
     }
 

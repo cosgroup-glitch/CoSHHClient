@@ -78,12 +78,19 @@ public class Fightsess extends Widget {
     public int pho;
     private Fightview fv;
     private static final String DRAGGER = "Fightsess:drag";
-    private FakeDraggerWdg dragger = new FakeDraggerWdg(DRAGGER, CFG.DRAG_COMBAT_UI) {
+    private static final String[] BAR_DRAGGERS = {"Combat bar 1", "Combat bar 2", "Combat bar 3"};
+    public static final Coord BAR_SIZE = UI.scale(new Coord(232, 50));
+    private FakeDraggerWdg dragger = new FakeDraggerWdg(DRAGGER) {
 	public boolean mousedown(MouseDownEvent ev) {
 	    if(super.mousedown(ev))
 		return(true);
 	    return(!active && DraggableWidget.guiEditMode() && ev.c.isect(Coord.z, sz));
 	}
+    };
+    private final FakeDraggerWdg[] bardraggers = {
+	new FakeDraggerWdg(BAR_DRAGGERS[0]),
+	new FakeDraggerWdg(BAR_DRAGGERS[1]),
+	new FakeDraggerWdg(BAR_DRAGGERS[2])
     };
     private boolean active = true;
     private boolean ended = false;
@@ -186,11 +193,17 @@ public class Fightsess extends Widget {
 	calendar.hide();
 	dragger.sz = cdframe.sz();
 	parent.add(dragger, Coord.z);
+	for(FakeDraggerWdg bar : bardraggers) {
+	    bar.sz = BAR_SIZE;
+	    parent.add(bar, Coord.z);
+	}
     }
     
     @Override
     public void remove() {
 	dragger.remove();
+	for(FakeDraggerWdg bar : bardraggers)
+	    bar.remove();
 	super.remove();
     }
     
@@ -326,9 +339,20 @@ public class Fightsess extends Widget {
     }
 
     private int reducerAction(OpeningState openings) {
-	String[] prefs = reducerPrefs(openings);
+	String[] prefs = safeReducerPrefs(reducerPrefs(openings), openings);
 	int ret = actionIndex(withDashFallback(prefs, openings));
-	return ret >= 0 ? ret : actionIndex(ANY_REDUCER);
+	return ret >= 0 ? ret : actionIndex(safeReducerPrefs(ANY_REDUCER, openings));
+    }
+
+    private String[] safeReducerPrefs(String[] prefs, OpeningState openings) {
+	if((prefs == null) || (openings.value(Buff.OPEN_RED) > 9))
+	    return prefs;
+	java.util.List<String> ret = new ArrayList<>();
+	for(String pref : prefs) {
+	    if(!"paginae/atk/zigzag".equals(pref))
+		ret.add(pref);
+	}
+	return ret.toArray(new String[0]);
     }
 
     private String[] reducerPrefs(OpeningState openings) {
@@ -616,7 +640,7 @@ public class Fightsess extends Widget {
 	}
 	if(forcedestroy) {
 	    super.destroy();
-	} else if(!CFG.KEEP_COMBAT_UI_AFTER_COMBAT.get()) {
+	} else if(!CFG.KEEP_COMBAT_UI_AFTER_COMBAT.get() && !DraggableWidget.guiEditMode()) {
 	    super.destroy();
 	} else if(active) {
 	    active = false;
@@ -646,6 +670,26 @@ public class Fightsess extends Widget {
 	return(new Coord((actpitch * (i % rl)) - (((rl - 1) * actpitch) / 2), UI.scale(225)));
     }
 
+    public static Coord defaultBarPosition(GameUI gui, int row) {
+	int xa = gui.calendar.rootpos().x + (gui.calendar.sz.x / 2);
+	int bottom = gui.beltwdg.c.y - UI.scale(40);
+	return Coord.of(xa - UI.scale(118), bottom - UI.scale(25) + (row * UI.scale(50)));
+    }
+
+    private void updateBarPositions() {
+	GameUI gui = getparent(GameUI.class);
+	for(int i = 0; i < bardraggers.length; i++)
+	    bardraggers[i].origin(defaultBarPosition(gui, i));
+    }
+
+    private Coord actionCoord(int i) {
+	return bardraggers[i / 5].c.add(UI.scale((i % 5) * 50), 0);
+    }
+
+    private Coord utilityCoord(int i) {
+	return bardraggers[2].c.add(UI.scale(i * 50), 0);
+    }
+
     private static final Coord cmc = UI.scale(new Coord(0, 67));
     private static final Coord usec1 = UI.scale(new Coord(-65, 67));
     private static final Coord usec2 = UI.scale(new Coord(65, 67));
@@ -670,6 +714,7 @@ public class Fightsess extends Widget {
 	int bottom = ui.gui.beltwdg.c.y - UI.scale(40);
 	double now = Utils.rtime();
 	reportOpeningDecay();
+	updateBarPositions();
 
 	for(Buff buff : fv.buffs.children(Buff.class))
 	    buff.draw(g.reclip(altui ? new Coord(x0 - buff.c.x - Buff.cframe.sz().x - UI.scale(80), y0) : pcc.add(-buff.c.x - Buff.cframe.sz().x - UI.scale(20), buff.c.y + pho - Buff.cframe.sz().y), buff.sz));
@@ -742,7 +787,7 @@ public class Fightsess extends Widget {
 	    }
 	}
 	for(int i = 0; i < actions.length; i++) {
-	    Coord ca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(actc(i)) : pcc.add(actc(i));
+	    Coord ca = actionCoord(i);
 	    Action act = actions[i];
 	    try {
 		if(act != null) {
@@ -765,6 +810,8 @@ public class Fightsess extends Widget {
 		    } else {
 			g.image(actframe, ca.sub(actframeo));
 		    }
+		} else if(DraggableWidget.guiEditMode()) {
+		    g.image(actframe, ca.sub(actframeo));
 		}
 	    } catch(Loading l) {}
 	}
@@ -773,7 +820,7 @@ public class Fightsess extends Widget {
 
     private void drawReducerBar(GOut g, boolean altui, int xa, int bottom) {
 	for(int i = 0; i < 5; i++) {
-	    Coord ca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(i)) : pcc.add(utilityc(i));
+	    Coord ca = utilityCoord(i);
 	    g.image(actframe, ca.sub(actframeo));
 	    if(i == 0) {
 		drawReducerIcon(g, ca);
@@ -851,6 +898,7 @@ public class Fightsess extends Widget {
     }
     
     private void drawinactive(GOut g) {
+	updateBarPositions();
 	Coord c0 = ui.gui.calendar.rootpos().add(ui.gui.calendar.sz.div(2));
 	Coord nsz = inactiveDraggerSize();
 	if(!dragger.sz.equals(nsz)) {
@@ -894,6 +942,17 @@ public class Fightsess extends Widget {
 	}
 	drawinactiveuse(g, lastact1, lastuse1, center.add(usec1.mul(scale)), now, scale, cooldownAlpha);
 	drawinactiveuse(g, lastact2, lastuse2, center.add(usec2.mul(scale)), now, scale, endedAlpha);
+	if(DraggableWidget.guiEditMode())
+	    drawEmptyCombatBars(g);
+    }
+
+    private void drawEmptyCombatBars(GOut g) {
+	for(int row = 0; row < bardraggers.length; row++) {
+	    for(int i = 0; i < 5; i++) {
+		Coord ca = bardraggers[row].c.add(UI.scale(i * 50), 0);
+		g.image(actframe, ca.sub(actframeo));
+	    }
+	}
     }
     
     private int inactiveBuffAlpha(InactiveBuff buff, double now) {
@@ -907,6 +966,8 @@ public class Fightsess extends Widget {
     }
     
     private static int fadeAlpha(double fadeStart, double now) {
+	if(DraggableWidget.guiEditMode())
+	    return(255);
 	if(fadeStart <= 0)
 	    return(255);
 	double elapsed = now - fadeStart;
@@ -974,6 +1035,7 @@ public class Fightsess extends Widget {
     public static Tex reducerKeyTex = null;
     public static Tex targetClosestKeyTex = null;
     public static Tex guardedSkillsKeyTex = null;
+    private Boolean targetClosestKeyAutoState = null;
     
     static {
 	Reactor.listen(COMBAT_KEYS_UPDATED, () ->
@@ -1005,8 +1067,13 @@ public class Fightsess extends Widget {
     }
 
     private Tex targetClosestKeyTex() {
-	if(targetClosestKeyTex == null)
-	    targetClosestKeyTex = Text.renderstroked(targetClosestKeybind.shortcut(true), fnd).tex();
+	boolean auto = CFG.MAZES_TARGET_CLOSEST_COMBAT.get();
+	if((targetClosestKeyTex == null) || (targetClosestKeyAutoState == null) || (targetClosestKeyAutoState != auto)) {
+	    if(targetClosestKeyTex != null)
+		targetClosestKeyTex.dispose();
+	    targetClosestKeyTex = Text.renderstroked(auto ? targetClosestKeybind.shortcut(true) : "Space", fnd).tex();
+	    targetClosestKeyAutoState = auto;
+	}
 	return targetClosestKeyTex;
     }
 
@@ -1027,13 +1094,13 @@ public class Fightsess extends Widget {
 	int xa = x0;
 	int y0 =  ui.gui.calendar.rootpos().y + ui.gui.calendar.sz.y / 2;
 	int bottom = ui.gui.beltwdg.c.y - 40;
-	Coord rca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(0)) : pcc.add(utilityc(0));
+	Coord rca = utilityCoord(0);
 	if(c.isect(rca, off))
 	    return "Auto combat reducer: " + reducerMode.label;
-	Coord tca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(1)) : pcc.add(utilityc(1));
+	Coord tca = utilityCoord(1);
 	if(c.isect(tca, off))
 	    return "Target closest: " + (CFG.MAZES_TARGET_CLOSEST_COMBAT.get() ? "On" : "Off");
-	Coord gca = altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(4)) : pcc.add(utilityc(4));
+	Coord gca = utilityCoord(4);
 	if(c.isect(gca, off))
 	    return guardedSkill == null
 		? "Guarded skills: " + (CFG.GUARDED_COMBAT_SKILLS_ENABLED.get() ? "On" : "Off")
@@ -1062,7 +1129,7 @@ public class Fightsess extends Widget {
 	}
 	final int rl = 5;
 	for(int i = 0; i < actions.length; i++) {
-	    Coord ca = altui ? new Coord(x0 - 18, bottom - 150).add(actc(i)).add(16, 16) : pcc.add(actc(i));
+	    Coord ca = actionCoord(i).add(UI.scale(16, 16));
 	    Indir<Resource> act = (actions[i] == null) ? null : actions[i].res;
 	    if(act != null) {
 		Tex img = act.get().flayer(Resource.imgc).tex();
@@ -1125,10 +1192,7 @@ public class Fightsess extends Widget {
     }
 
     private Coord utilityButtonCoord(int i) {
-	boolean altui = CFG.ALT_COMBAT_UI.get();
-	int xa = ui.gui.calendar.rootpos().x + ui.gui.calendar.sz.x / 2;
-	int bottom = ui.gui.beltwdg.c.y - UI.scale(40);
-	return altui ? new Coord(xa - UI.scale(18), bottom - UI.scale(150)).add(utilityc(i)) : pcc.add(utilityc(i));
+	return utilityCoord(i);
     }
 
     private void cycleReducerMode() {
@@ -1148,6 +1212,10 @@ public class Fightsess extends Widget {
     public boolean handleUtilityKey(KbdEvent ev) {
 	if(!active)
 	    return false;
+	if(!CFG.MAZES_TARGET_CLOSEST_COMBAT.get() && (ev.code == KeyEvent.VK_SPACE) && (ev.mods == 0)) {
+	    fv.targetNearestFoe();
+	    return true;
+	}
 	if(reducerKeybind.match(ev)) {
 	    cycleReducerMode();
 	    return true;

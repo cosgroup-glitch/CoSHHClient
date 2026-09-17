@@ -61,6 +61,7 @@ public class Fightview extends Widget {
     public Mainrel curdisp;
     private List<Relation> nonmain = Collections.emptyList();
     private double closestTargetTimer = 0;
+    private static final double TARGET_LOCK_RANGE = 1.6;
 
     public class Relation {
         public final long gobid;
@@ -320,8 +321,8 @@ public class Fightview extends Widget {
 	if(closestTargetTimer > 0)
 	    return;
 	closestTargetTimer = 0.25;
-	double range = CombatWeaponRange.equippedRange(ui.gui);
-	if((current != null) && !Double.isNaN(range) && relationWithinRange(current, range))
+	double range = TARGET_LOCK_RANGE;
+	if((current != null) && relationWithinRange(current, range))
 	    return;
 	Relation rel = closestRelation(range);
 	if((rel != null) && (rel != current))
@@ -349,6 +350,12 @@ public class Fightview extends Widget {
 	    }
 	}
 	return bestInRange != null ? bestInRange : bestAny;
+    }
+
+    public void targetNearestFoe() {
+	Relation rel = closestRelation(Double.NaN);
+	if((rel != null) && (rel != current))
+	    wdgmsg("bump", (int)rel.gobid);
     }
 
     private boolean relationWithinRange(Relation rel, double range) {

@@ -2,6 +2,7 @@ package integrations.food;
 
 import haven.*;
 import haven.resutil.FoodInfo;
+import integrations.mapv4.MappingClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -32,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 
 public class FoodService {
-    public static final String API_ENDPOINT = CFG.AUTOMAP_ENDPOINT.get();
     private static final String FOOD_DATA_URL = "/data/food-info.json";
     private static final File FOOD_DATA_CACHE_FILE = new File("food_data.json");
     private static String token = "KamisLabyrinthClient";
@@ -40,6 +40,12 @@ public class FoodService {
     private static final Map<String, ParsedFoodInfo> cachedItems = new ConcurrentHashMap<>();
     private static final Queue<HashedFoodInfo> sendQueue = new ConcurrentLinkedQueue<>();
     public static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+
+    private static String endpoint() {
+	if(MappingClient.initialized())
+	    return MappingClient.getInstance().GetEndpoint();
+	return CFG.DEFAULT_AUTOMAP_ENDPOINT;
+    }
     
     static {
 	scheduler.execute(FoodService::loadCachedFoodData);
@@ -80,7 +86,7 @@ public class FoodService {
 	    }
 	    if (System.currentTimeMillis() - lastModified > TimeUnit.MINUTES.toMillis(30)) {
 		try {
-		    HttpURLConnection connection = (HttpURLConnection) new URL(API_ENDPOINT + FOOD_DATA_URL).openConnection();
+		    HttpURLConnection connection = (HttpURLConnection) new URL(endpoint() + FOOD_DATA_URL).openConnection();
 		    connection.setRequestProperty("Accept-Encoding", "gzip");
 		    connection.setRequestProperty("User-Agent", "H&H Client/" + token);
 		    connection.setRequestProperty("Cache-Control", "no-cache");
@@ -194,7 +200,7 @@ public class FoodService {
 	if (!toSend.isEmpty()) {
 	    try {
 		HttpURLConnection connection =
-		    (HttpURLConnection) new URL(API_ENDPOINT + "/food").openConnection();
+		    (HttpURLConnection) new URL(endpoint() + "/food").openConnection();
 		connection.setRequestMethod("POST");
 		connection.setRequestProperty("Content-Type", "application/json");
 		connection.setRequestProperty("User-Agent", "H&H Client/" + token);

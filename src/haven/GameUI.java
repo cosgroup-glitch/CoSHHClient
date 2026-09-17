@@ -34,12 +34,15 @@ import haven.rx.BuffToggles;
 import haven.rx.Reactor;
 import integrations.mapv4.MappingClient;
 import me.ender.ClientUtils;
+import me.ender.FakeDraggerWdg;
 import me.ender.QuestHelper;
 import me.ender.minimap.*;
 import me.ender.timer.Timer;
 
 import java.util.*;
 import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
@@ -57,7 +60,10 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public final String chrid, genus;
     public final long plid;
     private final Hidepanel ulpanel, umpanel, urpanel, blpanel, mapmenupanel, brpanel, menupanel;
-    private QuestObjectiveMenuButton questObjectiveMenuButton;
+    private final StandaloneMenuButton[] mainMenuButtons = new StandaloneMenuButton[6];
+    private SearchMenuButton searchMenuButton;
+    private StandaloneMenuButton chatToggleButton, minimapToggleButton;
+    private Window widgetResetWindow;
     public StatusWdg statuswdg;
     public TimeWdg timewdg;
     public Widget portrait;
@@ -103,9 +109,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     private boolean afk = false;
     public BeltSlot[] belt = new BeltSlot[144];
     public Widget beltwdg;
-    public MapMenuBar mapmenubar;
+    public MenuGridPanel menuGridPanel;
     public ChatPopup chatpop;
     public GUIEditPanel guieditpanel;
+    public CombatUIEditPreview combatEditPreview;
+    public final CombatBarEditPreview[] combatBarEditPreviews = new CombatBarEditPreview[3];
     public final Map<Integer, String> polowners = new HashMap<Integer, String>();
     public Bufflist buffs;
     public CraftDBWnd craftwnd = null;
@@ -307,7 +315,6 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     }
 
     private final Coord minimapc;
-    private final Coord menugridc;
     public GameUI(String chrid, long plid, String genus) {
 	me.ender.LegacyBGM.onEnterGame();
 	this.chrid = chrid;
@@ -369,28 +376,40 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 		public Coord get() {
 		    return(new Coord(GameUI.this.sz.x, Math.min(brpanel.c.y - UI.scale(79), GameUI.this.sz.y - menupanel.sz.y)));
 		}
-	    }, new Coord(1, 0)) {
-		public void move(double a) {
-		    super.move(a);
-		    positionQuestObjectiveMenuButton();
-		}
-	    });
+	    }, new Coord(1, 0)));
 	ulpanel = add(new Hidepanel("gui-ul", null, new Coord(-1, -1)));
 	umpanel = add(new Hidepanel("gui-um", null, new Coord( 0, -1)));
 	urpanel = add(new Hidepanel("gui-ur", null, new Coord( 1, -1)));
 	blpanel.add(new Img(Resource.loadtex("gfx/hud/blframe")), 0, 0);
 	minimapc = new Coord(UI.scale(4), UI.scale(34));
-	Tex rbtnbg = Resource.loadtex("gfx/hud/csearch-bg");
-	Img brframe = brpanel.add(new Img(Resource.loadtex("gfx/hud/brframe")), rbtnbg.sz().x - UI.scale(22), 0);
-	menugridc = brframe.c.add(UI.scale(20), UI.scale(34));
-	Img rbtnimg = brpanel.add(new Img(rbtnbg), 0, brpanel.sz.y - rbtnbg.sz().y);
-	menupanel.add(new MainMenu(), 0, 0);
-	questObjectiveMenuButton = add(new QuestObjectiveMenuButton(), Coord.z);
-	positionQuestObjectiveMenuButton();
-	menubuttons(rbtnimg);
-	foldbuttons();
-	mapmenubar = add(new MapMenuBar(), Coord.z);
-	mapmenubar.raise();
+	mainMenuButtons[0] = add(new StandaloneMenuButton("MenuButton:Inventory",
+	    new BarMenuCheckBox("rbtn-inv", kb_inv, "Inventory", Coord.of(36, 69))
+		.state(() -> wndstate(invwnd)).click(() -> togglewnd(invwnd))), Coord.z);
+	mainMenuButtons[1] = add(new StandaloneMenuButton("MenuButton:Equipment",
+	    new BarMenuCheckBox("rbtn-equ", kb_equ, "Equipment", Coord.of(68, 71))
+		.state(() -> wndstate(equwnd)).click(() -> togglewnd(equwnd))), Coord.z);
+	mainMenuButtons[2] = add(new StandaloneMenuButton("MenuButton:Character",
+	    new BarMenuCheckBox("rbtn-chr", kb_chr, "Character Sheet", Coord.of(103, 67))
+		.state(() -> wndstate(chrwdg)).click(() -> togglewnd(chrwdg))), Coord.z);
+	mainMenuButtons[3] = add(new StandaloneMenuButton("MenuButton:KithKin",
+	    new BarMenuCheckBox("rbtn-bud", kb_bud, "Kith & Kin", Coord.of(105, 33))
+		.state(this::kithKinWindowState).click(this::toggleKithKinWindow)), Coord.z);
+	mainMenuButtons[4] = add(new StandaloneMenuButton("MenuButton:QuestObjectives",
+	    new BarMenuCheckBox("rbtn-questobj", kb_questobj, "Quest Objectives", null)
+		.state(() -> wndstate(questObjectivesWindow)).click(() -> togglewnd(questObjectivesWindow))), Coord.z);
+	mainMenuButtons[5] = add(new StandaloneMenuButton("MenuButton:Options",
+	    new BarMenuCheckBox("rbtn-opt", kb_opt, "Options", Coord.of(105, 1))
+		.state(() -> wndstate(opts)).click(() -> togglewnd(opts))), Coord.z);
+	positionDefaultMenuButtons();
+	searchMenuButton = add(new SearchMenuButton(), Coord.z);
+	if(!searchMenuButton.hasCustomPosition())
+	    searchMenuButton.c = defaultSearchMenuPosition();
+	chatToggleButton = add(new StandaloneMenuButton("MenuButton:Chat",
+	    new BarMenuButton("hb-btn-chat", kb_chat, "Show/hide chat").action(GameUI.this::toggleChat)), Coord.z);
+	minimapToggleButton = add(new StandaloneMenuButton("MenuButton:Minimap",
+	    new BarMenuButton("mmap/view", KeyBinding.get("toggle-minimap", KeyMatch.nil), "Show/hide map")
+		.action(GameUI.this::toggleMap)), Coord.z);
+	positionDefaultPanelButtons();
 	chatpop = add(new ChatPopup(), Coord.z);
 	chatpop.raise();
 	guieditpanel = add(new GUIEditPanel(), Coord.z);
@@ -402,6 +421,9 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
 	buffs = ulpanel.add(new Bufflist("player"), portrait.c.x + portrait.sz.x + UI.scale(10), portrait.c.y + ((IMeter.fsz.y + UI.scale(2)) * 2) + UI.scale(5 - 2));
 	calendar = umpanel.add(new Cal(), Coord.z);
+	combatEditPreview = add(new CombatUIEditPreview(), Coord.z);
+	for(int i = 0; i < combatBarEditPreviews.length; i++)
+	    combatBarEditPreviews[i] = add(new CombatBarEditPreview(i), Coord.z);
 	eqproxyHandBelt = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_HAND, SLOTS.HAND_LEFT, SLOTS.HAND_RIGHT, SLOTS.BELT), UI.scale(420, 5));
 	eqproxyPouchBack = add(new EquipProxy(CFG.UI_SHOW_EQPROXY_POUCH, "EquipProxy2", SLOTS.POUCH_LEFT, SLOTS.POUCH_RIGHT, SLOTS.BACK), UI.scale(420, 35));
 	syslog = chat.add(new ChatUI.Log("System"));
@@ -485,47 +507,19 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     }
 
     public static final KeyBinding kb_srch = KeyBinding.get("scm-srch", KeyMatch.nil);
-    private void menubuttons(Widget bg) {
-	brpanel.add(new MenuButton("csearch", kb_srch, "Search actions...") {
-		public void click() {
-		    if(srchwnd == null)
-			return;
-		    if(srchwnd.visible() && !srchwnd.hasfocus)
-			this.setfocus(srchwnd);
-		    else
-			togglewnd(srchwnd);
-		}
-	    }, bg.c);
+    private void toggleSearch() {
+	if(srchwnd == null)
+	    return;
+	if(srchwnd.visible() && !srchwnd.hasfocus)
+	    setfocus(srchwnd);
+	else
+	    togglewnd(srchwnd);
     }
 
     /* Ice cream */
     private final IButton[] fold_br = new IButton[4];
     private final IButton[] fold_bl = new IButton[4];
     private void updfold(boolean reset) {
-	int br;
-	if(brpanel.tvis && menupanel.tvis)
-	    br = 0;
-	else if(brpanel.tvis && !menupanel.tvis)
-	    br = 1;
-	else if(!brpanel.tvis && !menupanel.tvis)
-	    br = 2;
-	else
-	    br = 3;
-	for(int i = 0; i < fold_br.length; i++)
-	    fold_br[i].show(i == br);
-
-	int bl;
-	if(blpanel.tvis && mapmenupanel.tvis)
-	    bl = 0;
-	else if(blpanel.tvis && !mapmenupanel.tvis)
-	    bl = 1;
-	else if(!blpanel.tvis && !mapmenupanel.tvis)
-	    bl = 2;
-	else
-	    bl = 3;
-	for(int i = 0; i < fold_bl.length; i++)
-	    fold_bl[i].show(i == bl);
-
 	if(reset)
 	    resetui();
     }
@@ -754,6 +748,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    fitwdg(mapfile);
 	    setfocus(mapfile);
 	}
+	if(mapfile != null)
+	    Utils.setprefb("wndvis-map", mapfile.visible());
     }
 
     public class Hidepanel extends Widget {
@@ -1364,16 +1360,17 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 		MapFile file;
 		try {
 		    file = MapFile.load(mapstore, mapfilename());
-		    if(CFG.AUTOMAP_UPLOAD.get() && MappingClient.initialized()) {
-			MappingClient.getInstance().setGenus(genus);
-			MappingClient.getInstance().ProcessMap(file, (m) -> {
+		    if(MappingClient.initialized() && MappingClient.getInstance().MarkerUploadsEnabled()) {
+			MappingClient automapper = MappingClient.getInstance();
+			automapper.setGenus(genus);
+			automapper.ProcessMap(file, automapper.UsesCustomEndpoint() ? (m) -> {
 			    if(m instanceof PMarker) {
 				return CFG.AUTOMAP_MARKERS.get().stream()
 				    .map(group -> group.col)
 				    .anyMatch(color -> color.equals(((PMarker)m).color));
 			    }
 			    return true;
-			});
+			} : null);
 		    }
 		} catch(java.io.IOException e) {
 		    /* XXX: Not quite sure what to do here. It's
@@ -1394,7 +1391,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    }
 	    placemmap();
 	} else if(place == "menu") {
-	    menu = (MenuGrid)brpanel.add(child, menugridc);
+	    menuGridPanel = add(new MenuGridPanel((MenuGrid)child), Coord.z);
+	    menu = menuGridPanel.menu;
+	    if(!menuGridPanel.hasCustomPosition())
+		menuGridPanel.c = defaultMenuGridPosition();
+	    positionDefaultMenuButtons();
 	    createToolBelts();
 	    fitwdg(srchwnd = GameUI.this.add(new MenuSearch.Main(menu), Utils.getprefc("wndc-srch", UI.scale(200, 200))));
 	    srchwnd.reqclose(srchwnd::hide).hide();
@@ -1688,14 +1689,34 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	int beltoffset = (CFG.VANILLA_CHAT.get() ? 0 : blpw);
 	if(dockBelt())
 	    beltwdg.c = new Coord(chat.c.x + beltoffset, Math.min(chat.c.y - beltwdg.sz.y, sz.y - beltwdg.sz.y));
-	if(dockMapMenuBar())
-	    mapmenubar.c = defaultMapMenuBarPosition();
 	if(guieditpanel != null) {
 	    guieditpanel.visible = DraggableWidget.guiEditMode();
 	    guieditpanel.c = sz.sub(guieditpanel.sz).div(2);
-	    guieditpanel.raise();
+	    guieditpanel.lower();
+	}
+	if(combatEditPreview != null) {
+	    combatEditPreview.visible = DraggableWidget.guiEditMode() && (fsess == null);
+	    combatEditPreview.origin(calendar.rootpos().add(calendar.sz.div(2)).sub(combatEditPreview.sz.div(2)));
+	    if(combatEditPreview.visible)
+		combatEditPreview.raise();
+	}
+	for(int i = 0; i < combatBarEditPreviews.length; i++) {
+	    CombatBarEditPreview bar = combatBarEditPreviews[i];
+	    if(bar == null)
+		continue;
+	    bar.visible = DraggableWidget.guiEditMode() && (fsess == null);
+	    bar.origin(Fightsess.defaultBarPosition(this, i));
+	    if(bar.visible)
+		bar.raise();
 	}
 	super.draw(g);
+	if((combatEditPreview != null) && combatEditPreview.visible) {
+	    Coord center = combatEditPreview.c.add(combatEditPreview.sz.div(2));
+	    g.chcolor(DraggableWidget.EDIT_LINE);
+	    g.line(Coord.of(0, center.y), Coord.of(sz.x, center.y), 1);
+	    g.line(Coord.of(center.x, 0), Coord.of(center.x, sz.y), 1);
+	    g.chcolor();
+	}
 	if(DraggableWidget.guiEditMode() && CFG.GUI_EDIT_GRID.get())
 	    drawEditGrid(g);
 	int by = sz.y;
@@ -2036,6 +2057,14 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    private boolean kithKinWindowState() {
+	return(wndstate(zerg));
+    }
+
+    private void toggleKithKinWindow() {
+	togglewnd(zerg);
+    }
+
     public static class MenuButton extends IButton {
 	MenuButton(String base, KeyBinding gkey, String tooltip) {
 	    super("gfx/hud/" + base, "", "-d", "-h");
@@ -2115,33 +2144,137 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public static final KeyBinding kb_bud = KeyBinding.get("bud", KeyMatch.forchar('B', KeyMatch.C));
     public static final KeyBinding kb_opt = KeyBinding.get("opt", KeyMatch.forchar('O', KeyMatch.C));
     public static final KeyBinding kb_questobj = KeyBinding.get("questobj", KeyMatch.nil);
-    private static final Tex menubg = Resource.loadtex("gfx/hud/rbtn-bg");
-    private void positionQuestObjectiveMenuButton() {
-	if((questObjectiveMenuButton != null) && (menupanel != null))
-	    questObjectiveMenuButton.move(menupanel.c.add(UI.scale(113), UI.scale(-30)));
-    }
+    public class BarMenuCheckBox extends MenuCheckBox {
+	private final Coord crop;
+	private static final int ICONSZ = 40;
 
-    public class QuestObjectiveMenuButton extends MenuCheckBox {
-	QuestObjectiveMenuButton() {
-	    super("rbtn-questobj", kb_questobj, "Quest Objectives");
-	    state(() -> wndstate(questObjectivesWindow));
-	    click(() -> togglewnd(questObjectivesWindow));
+	BarMenuCheckBox(String base, KeyBinding gkey, String tooltip, Coord crop) {
+	    super(base, gkey, tooltip);
+	    this.crop = (crop == null) ? null : UI.scale(crop);
+	    resize(UI.scale(ICONSZ, ICONSZ));
 	}
-    }
 
-    public class MainMenu extends Widget {
-	public MainMenu() {
-	    super(menubg.sz());
-	    add(new MenuCheckBox("rbtn-inv", kb_inv, "Inventory"), 0, 0).state(() -> wndstate(invwnd)).click(() -> togglewnd(invwnd));
-	    add(new MenuCheckBox("rbtn-equ", kb_equ, "Equipment"), 0, 0).state(() -> wndstate(equwnd)).click(() -> togglewnd(equwnd));
-	    add(new MenuCheckBox("rbtn-chr", kb_chr, "Character Sheet"), 0, 0).state(() -> wndstate(chrwdg)).click(() -> togglewnd(chrwdg));
-	    add(new MenuCheckBox("rbtn-bud", kb_bud, "Kith & Kin"), 0, 0).state(() -> wndstate(zerg)).click(() -> togglewnd(zerg));
-	    add(new MenuCheckBox("rbtn-opt", kb_opt, "Options"), 0, 0).state(() -> wndstate(opts)).click(() -> togglewnd(opts));
+	public boolean checkhit(Coord c) {
+	    return(c.isect(Coord.z, sz));
 	}
 
 	public void draw(GOut g) {
-	    g.image(menubg, Coord.z);
+	    Tex tex = state() ? (h ? hoverdown : down) : (h ? hoverup : up);
+	    if(crop == null) {
+		Coord tsz = tex.sz();
+		int pad = UI.scale(2);
+		double scale = Math.min((sz.x - (pad * 2)) / (double)tsz.x,
+			(sz.y - (pad * 2)) / (double)tsz.y);
+		Coord dsz = Coord.of(Math.max(1, (int)Math.round(tsz.x * scale)),
+			Math.max(1, (int)Math.round(tsz.y * scale)));
+		g.aimage(tex, sz.div(2), 0.5, 0.5, dsz);
+	    } else {
+		Coord csz = UI.scale(ICONSZ, ICONSZ);
+		g.image(new TexSI(tex, crop, crop.add(csz)), Coord.z, sz);
+	    }
+	}
+    }
+
+    public class BarMenuButton extends MenuButton {
+	private static final int ICONSZ = 40;
+
+	BarMenuButton(String base, KeyBinding gkey, String tooltip) {
+	    super(base, gkey, tooltip);
+	    resize(UI.scale(ICONSZ, ICONSZ));
+	    recthit = true;
+	}
+
+	public void draw(BufferedImage buf) {
+	    BufferedImage img = (a && h) ? down : ((h || (d != null)) ? hover : up);
+	    Rectangle visible = visibleBounds(img);
+	    int pad = UI.scale(2);
+	    int availw = Math.max(1, buf.getWidth() - (pad * 2));
+	    int availh = Math.max(1, buf.getHeight() - (pad * 2));
+	    double scale = Math.min(availw / (double)visible.width, availh / (double)visible.height);
+	    int w = Math.max(1, (int)Math.round(visible.width * scale));
+	    int h = Math.max(1, (int)Math.round(visible.height * scale));
+	    Graphics g = buf.getGraphics();
+	    int x = (buf.getWidth() - w) / 2;
+	    int y = (buf.getHeight() - h) / 2;
+	    g.drawImage(img, x, y, x + w, y + h, visible.x, visible.y,
+		visible.x + visible.width, visible.y + visible.height, null);
+	    g.dispose();
+	}
+
+	private Rectangle visibleBounds(BufferedImage img) {
+	    int minx = img.getWidth(), miny = img.getHeight(), maxx = -1, maxy = -1;
+	    for(int y = 0; y < img.getHeight(); y++) {
+		for(int x = 0; x < img.getWidth(); x++) {
+		    if(((img.getRGB(x, y) >>> 24) & 0xff) != 0) {
+			minx = Math.min(minx, x);
+			miny = Math.min(miny, y);
+			maxx = Math.max(maxx, x);
+			maxy = Math.max(maxy, y);
+		    }
+		}
+	    }
+	    return(maxx < minx ? new Rectangle(0, 0, img.getWidth(), img.getHeight()) :
+		new Rectangle(minx, miny, maxx - minx + 1, maxy - miny + 1));
+	}
+    }
+
+    public class SearchMenuButton extends ResizableDraggableWidget {
+	public SearchMenuButton() {
+	    super("ActionSearchButton", UI.scale(20, 20));
+	    resize(UI.scale(40, 40));
+	    add(new BarMenuButton("csearch", kb_srch, "Search actions...").action(GameUI.this::toggleSearch), Coord.z);
+	}
+
+	protected void initCfg() {
+	    super.initCfg();
+	    resize(sz);
+	}
+
+	public void resize(Coord sz) {
+	    super.resize(sz);
+	    if(child != null) {
+		child.resize(sz);
+		child.c = Coord.z;
+	    }
+	}
+
+	public void draw(GOut g) {
 	    super.draw(g);
+	    drawresize(g);
+	}
+
+	protected boolean showEditEye() {
+	    return false;
+	}
+    }
+
+    public class StandaloneMenuButton extends ResizableDraggableWidget {
+	public StandaloneMenuButton(String name, Widget button) {
+	    super(name, UI.scale(20, 20));
+	    resize(UI.scale(40, 40));
+	    add(button, sz.sub(button.sz).div(2));
+	}
+
+	protected void initCfg() {
+	    super.initCfg();
+	    resize(sz);
+	}
+
+	public void resize(Coord sz) {
+	    super.resize(sz);
+	    if(child != null) {
+		child.resize(sz);
+		child.c = Coord.z;
+	    }
+	}
+
+	public void draw(GOut g) {
+	    super.draw(g);
+	    drawresize(g);
+	}
+
+	protected boolean showEditEye() {
+	    return false;
 	}
     }
 
@@ -2265,20 +2398,29 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	case 0:
 	    for(Hidepanel p : panels)
 		p.mshow(true);
-	    if(mapmenubar != null)
-		mapmenubar.show();
+	    if(menuGridPanel != null)
+		menuGridPanel.show();
+	    setMainMenuButtonsVisible(true);
+	    if(searchMenuButton != null)
+		searchMenuButton.show();
 	    break;
 	case 1:
 	    for(Hidepanel p : panels)
 		p.mshow();
-	    if(mapmenubar != null)
-		mapmenubar.show();
+	    if(menuGridPanel != null)
+		menuGridPanel.show();
+	    setMainMenuButtonsVisible(true);
+	    if(searchMenuButton != null)
+		searchMenuButton.show();
 	    break;
 	case 2:
 	    for(Hidepanel p : panels)
 		p.mshow(false);
-	    if(mapmenubar != null)
-		mapmenubar.hide();
+	    if(menuGridPanel != null)
+		menuGridPanel.hide();
+	    setMainMenuButtonsVisible(false);
+	    if(searchMenuButton != null)
+		searchMenuButton.hide();
 	    break;
 	}
     }
@@ -2287,8 +2429,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	Hidepanel[] panels = {blpanel, brpanel, ulpanel, umpanel, urpanel, menupanel, mapmenupanel};
 	for(Hidepanel p : panels)
 	    p.cshow(p.tvis);
-	if(mapmenubar != null)
-	    mapmenubar.show();
+	if(menuGridPanel != null)
+	    menuGridPanel.show();
+	setMainMenuButtonsVisible(true);
+	if(searchMenuButton != null)
+	    searchMenuButton.show();
 	uimode = 1;
     }
 
@@ -2320,11 +2465,13 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    prog.move(sz.sub(prog.sz).mul(0.5, 0.35));
 	if(dockBelt())
 	    beltwdg.c = new Coord(blpw + UI.scale(10), sz.y - beltwdg.sz.y - UI.scale(5));
-	if(dockMapMenuBar())
-	    mapmenubar.c = defaultMapMenuBarPosition();
+	if((menuGridPanel != null) && !menuGridPanel.hasCustomPosition())
+	    menuGridPanel.c = defaultMenuGridPosition();
 	statuswdg.c = new Coord(sz.x/2 + UI.scale(70), UI.scale(10));
 	timewdg.c = new Coord(sz.x/2 - UI.scale(270), UI.scale(10));
-	positionQuestObjectiveMenuButton();
+	positionDefaultMenuButtons();
+	if((searchMenuButton != null) && !searchMenuButton.hasCustomPosition())
+	    searchMenuButton.c = defaultSearchMenuPosition();
     }
 
     public void presize() {
@@ -2603,87 +2750,24 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
-    public class MapMenuBar extends DraggableWidget {
-	private static final int PAD = 3;
-	private static final int GAP = 2;
-	private static final int BTNSZ = 24;
-	private boolean over = false;
+    public class MenuGridPanel extends DraggableWidget {
+	public final MenuGrid menu;
 
-	public MapMenuBar() {
-	    super("MapMenuBar");
-	    add(chatToggleButton(), slotc(0));
-	    add(mapButton(), slotc(1));
-	    sz = slotc(2).add(UI.scale(PAD, PAD + BTNSZ));
+	public MenuGridPanel(MenuGrid menu) {
+	    super("MenuGrid");
+	    this.menu = add(menu, Coord.z);
+	    resize(menu.sz);
 	}
 
-	private Coord slotc(int i) {
-	    return(UI.scale(PAD + ((BTNSZ + GAP) * i), PAD));
+	protected void initCfg() {
+	    super.initCfg();
+	    resize(menu.sz);
 	}
 
-	private IButton mapButton() {
-	    IButton ret = new IButton("gfx/hud/mmap/marknames", "", "-d", "-h") {
-		    public void click() {
-			togglewnd(mapfile);
-			if(mapfile != null)
-			    Utils.setprefb("wndvis-map", mapfile.visible());
-		    }
-		};
-	    ret.resize(UI.scale(BTNSZ, BTNSZ));
-	    ret.recthit = true;
-	    ret.setgkey(kb_map);
-	    ret.invisibleKeys = true;
-	    ret.allowGlobalKeysWhenHidden(true);
-	    ret.settip("Map");
-	    return(ret);
+	public void cresize(Widget ch) {
+	    if(menu != null)
+		resize(menu.sz);
 	}
-
-	private IButton chatToggleButton() {
-	    IButton ret = new IButton("gfx/hud/hb-btn-chat", "", "-d", "-h") {
-		    Tex glow = new TexI(PUtils.rasterimg(PUtils.blurmask(up.getRaster(), UI.scale(2), UI.scale(2), Color.WHITE)));
-
-		    public void click() {
-			toggleChat();
-		    }
-
-		    @Override
-		    public Object tooltip(Coord c, Widget prev) {
-			if(!checkhit(c))
-			    return null;
-			String tt = "Chat";
-			if(kb_chat.key() != KeyMatch.nil)
-			    tt = String.format("%s ($col[255,255,0]{%s})", tt, kb_chat.key().name());
-			return RichText.render(tt, 0);
-		    }
-
-		    public void draw(GOut g) {
-			super.draw(g);
-			Color urg = chat.urgcols[chat.urgency];
-			if(urg != null) {
-			    GOut g2 = g.reclipl2(UI.scale(-4, -4), g.sz().add(UI.scale(4, 4)));
-			    g2.chcolor(urg.getRed(), urg.getGreen(), urg.getBlue(), 128);
-			    g2.image(glow, Coord.z);
-			}
-		    }
-		};
-	    ret.resize(UI.scale(BTNSZ, BTNSZ));
-	    ret.recthit = true;
-	    return(ret);
-	}
-
-	public void draw(GOut g) {
-	    if(over) {
-		g.chcolor(ToolBelt.BG_COLOR);
-		g.frect(Coord.z, sz);
-		g.chcolor();
-	    }
-	    super.draw(g);
-	}
-
-	public void mousemove(MouseMoveEvent ev) {
-	    over = ev.c.isect(Coord.z, sz);
-	    super.mousemove(ev);
-	}
-
     }
 
     public class ChatPopup extends DraggableWidget {
@@ -2721,12 +2805,54 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    public class CombatUIEditPreview extends FakeDraggerWdg {
+	public CombatUIEditPreview() {
+	    super("Fightsess:drag");
+	    resize(Fightsess.cdframe.sz());
+	}
+
+	protected void initCfg() {
+	    super.initCfg();
+	    resize(Fightsess.cdframe.sz());
+	}
+
+	public void draw(GOut g) {
+	    g.chcolor(24, 100, 190, 150);
+	    g.frect(Coord.z, sz);
+	    g.chcolor();
+	    super.draw(g);
+	}
+    }
+
+    public class CombatBarEditPreview extends FakeDraggerWdg {
+	public final int row;
+
+	public CombatBarEditPreview(int row) {
+	    super("Combat bar " + (row + 1));
+	    this.row = row;
+	    resize(Fightsess.BAR_SIZE);
+	}
+
+	protected void initCfg() {
+	    super.initCfg();
+	    resize(Fightsess.BAR_SIZE);
+	}
+
+	public void draw(GOut g) {
+	    for(int i = 0; i < 5; i++) {
+		Coord ca = UI.scale(i * 50, 0);
+		g.image(Fightsess.actframe, ca.sub(Fightsess.actframeo));
+	    }
+	    super.draw(g);
+	}
+    }
+
     public class GUIEditPanel extends Widget {
 	private final CheckBox grid;
 	private final TextEntry size;
 
 	public GUIEditPanel() {
-	    resize(UI.scale(220, 58));
+	    resize(UI.scale(220, 118));
 	    grid = add(new CheckBox("Snap grid") {
 		{
 		    a = CFG.GUI_EDIT_GRID.get();
@@ -2744,6 +2870,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    }, UI.scale(72, 29));
 	    size.canactivate = true;
 	    add(new Button(UI.scale(54), "Apply", false, () -> setGridSize(size.text())), UI.scale(132, 30));
+	    add(new Button(UI.scale(204), "Reset widgets...", false, GameUI.this::showWidgetResetWindow), UI.scale(8, 58));
+	    add(new Button(UI.scale(204), "GUI LOCK: ON", false, () -> CFG.GUI_LOCK.set(true)), UI.scale(8, 88));
 	}
 
 	private void setGridSize(String text) {
@@ -2769,6 +2897,72 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    private void showWidgetResetWindow() {
+	if(widgetResetWindow != null) {
+	    widgetResetWindow.raise();
+	    setfocus(widgetResetWindow);
+	    return;
+	}
+	widgetResetWindow = add(new WidgetResetWindow(), sz.div(2));
+	widgetResetWindow.c = widgetResetWindow.c.sub(widgetResetWindow.sz.div(2));
+	widgetResetWindow.raise();
+    }
+
+    private Map<String, DraggableWidget> draggableWidgets() {
+	Map<String, DraggableWidget> widgets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+	collectDraggableWidgets(this, widgets);
+	return(widgets);
+    }
+
+    private void collectDraggableWidgets(Widget root, Map<String, DraggableWidget> widgets) {
+	for(Widget child = root.child; child != null; child = child.next) {
+	    if(child instanceof DraggableWidget) {
+		DraggableWidget draggable = (DraggableWidget)child;
+		String name = draggable.widgetName();
+		if((name == null) || name.trim().isEmpty()) {
+		    name = draggable.getClass().getSimpleName();
+		    if((name == null) || name.isEmpty())
+			name = draggable.getClass().getSuperclass().getSimpleName();
+		}
+		String unique = name;
+		for(int n = 2; widgets.containsKey(unique); n++)
+		    unique = name + " (" + n + ")";
+		widgets.put(unique, draggable);
+	    }
+	    collectDraggableWidgets(child, widgets);
+	}
+    }
+
+    private void centerWidget(DraggableWidget widget) {
+	Coord center = rootpos().add(sz.div(2));
+	Coord local = center.sub(widget.parent.rootpos()).sub(widget.sz.div(2));
+	widget.resetPosition(local);
+	widget.raise();
+    }
+
+    public class WidgetResetWindow extends Window {
+	public WidgetResetWindow() {
+	    super(UI.scale(470, 420), "Reset widgets");
+	    justclose = true;
+	    Scrollport scroll = add(new Scrollport(UI.scale(450, 400)), Coord.z);
+	    int y = 0;
+	    for(Map.Entry<String, DraggableWidget> entry : draggableWidgets().entrySet()) {
+		DraggableWidget widget = entry.getValue();
+		scroll.cont.add(new Label(entry.getKey()), UI.scale(4, y + 5));
+		scroll.cont.add(new Button(UI.scale(72), "Center", false, () -> centerWidget(widget)),
+		    UI.scale(264, y));
+		scroll.cont.add(new Button(UI.scale(96), "Reset size", false, widget::resetSize),
+		    UI.scale(340, y));
+		y += 30;
+	    }
+	}
+
+	public void reqdestroy() {
+	    widgetResetWindow = null;
+	    super.reqdestroy();
+	}
+    }
+
     {
 	String val = Utils.getpref("belttype", "n");
 	if(val.equals("n")) {
@@ -2784,13 +2978,56 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	return(!(beltwdg instanceof DraggableWidget) || !((DraggableWidget)beltwdg).hasCustomPosition());
     }
 
-    private boolean dockMapMenuBar() {
-	return((mapmenubar != null) && !mapmenubar.hasCustomPosition());
+    private Coord defaultMenuGridPosition() {
+	int margin = UI.scale(5);
+	return(new Coord(Math.max(0, sz.x - menuGridPanel.sz.x - margin),
+			 Math.max(0, sz.y - menuGridPanel.sz.y - margin)));
     }
 
-    private Coord defaultMapMenuBarPosition() {
-	int y = chat.hasCustomPosition() ? sz.y - mapmenubar.sz.y - UI.scale(110) : chat.c.y - mapmenubar.sz.y - UI.scale(5);
-	return(new Coord(UI.scale(10), Math.max(UI.scale(10), y)));
+    private void setMainMenuButtonsVisible(boolean visible) {
+	for(StandaloneMenuButton button : mainMenuButtons) {
+	    if(button != null)
+		button.show(visible);
+	}
+	if(chatToggleButton != null)
+	    chatToggleButton.show(visible);
+	if(minimapToggleButton != null)
+	    minimapToggleButton.show(visible);
+    }
+
+    private void positionDefaultMenuButtons() {
+	int button = UI.scale(40);
+	int gap = UI.scale(5);
+	int width = (mainMenuButtons.length * button) + ((mainMenuButtons.length - 1) * gap);
+	int x = Math.max(0, sz.x - width - gap);
+	int y = Math.max(0, sz.y - button - gap);
+	if(menuGridPanel != null)
+	    y = Math.max(0, Math.min(y, menuGridPanel.c.y - button - gap));
+	for(int i = 0; i < mainMenuButtons.length; i++) {
+	    StandaloneMenuButton item = mainMenuButtons[i];
+	    if((item != null) && !item.hasCustomPosition())
+		item.c = Coord.of(x + (i * (button + gap)), y);
+	}
+	positionDefaultPanelButtons();
+    }
+
+    private Coord defaultSearchMenuPosition() {
+	int gap = UI.scale(5);
+	StandaloneMenuButton first = mainMenuButtons[0];
+	return(Coord.of(Math.max(0, first.c.x - searchMenuButton.sz.x - gap),
+		Math.max(0, first.c.y)));
+    }
+
+    private void positionDefaultPanelButtons() {
+	if((searchMenuButton == null) || (chatToggleButton == null) || (minimapToggleButton == null))
+	    return;
+	int gap = UI.scale(5);
+	if(!minimapToggleButton.hasCustomPosition())
+	    minimapToggleButton.c = Coord.of(Math.max(0, searchMenuButton.c.x - minimapToggleButton.sz.x - gap),
+		searchMenuButton.c.y);
+	if(!chatToggleButton.hasCustomPosition())
+	    chatToggleButton.c = Coord.of(Math.max(0, minimapToggleButton.c.x - chatToggleButton.sz.x - gap),
+		searchMenuButton.c.y);
     }
 
     private void createToolBelts() {

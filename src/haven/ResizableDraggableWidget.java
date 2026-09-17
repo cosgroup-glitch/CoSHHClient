@@ -33,6 +33,8 @@ public class ResizableDraggableWidget extends DraggableWidget {
     private Handle hitResizeHandle(Coord c) {
 	if(!canEditResize())
 	    return null;
+	if(compactHandles())
+	    return c.isect(handleCoord(Handle.SE), HANDLE) ? Handle.SE : null;
 	for(Handle h : Handle.values()) {
 	    if(c.isect(handleCoord(h), HANDLE))
 		return h;
@@ -41,13 +43,17 @@ public class ResizableDraggableWidget extends DraggableWidget {
     }
 
     private Handle hitPrecisionHandle(Coord c) {
-	if(!canEditResize())
+	if(!canEditResize() || compactHandles())
 	    return null;
 	for(Handle h : Handle.values()) {
 	    if(h.side() && c.isect(precisionCoord(h), HANDLE))
 		return h;
 	}
 	return null;
+    }
+
+    private boolean compactHandles() {
+	return (sz.x < (HANDLE.x * 4)) || (sz.y < (HANDLE.y * 4));
     }
 
     private Coord handleCoord(Handle h) {
@@ -170,6 +176,12 @@ public class ResizableDraggableWidget extends DraggableWidget {
 
     protected void drawresize(GOut g) {
 	if(!canEditResize()) {return;}
+	if(compactHandles()) {
+	    g.chcolor(resizeHandle == Handle.SE ? EDIT_ACTIVE : EDIT_PRECISION);
+	    g.frect(handleCoord(Handle.SE), HANDLE);
+	    g.chcolor();
+	    return;
+	}
 	for(Handle h : Handle.values()) {
 	    g.chcolor(h == resizeHandle ? EDIT_ACTIVE : ((h == Handle.SW) && CFG.GUI_EDIT_GRID.get()) ? EDIT_SNAP : EDIT_FILL);
 	    g.frect(handleCoord(h), HANDLE);

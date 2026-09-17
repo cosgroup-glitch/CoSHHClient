@@ -833,10 +833,12 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	if(m != null)
 	    m.move(c);
 	gobSpeed = (m != null) ? m.getv() : 0;
-	if(Boolean.TRUE.equals(isMe()) && (CFG.AUTOMAP_UPLOAD.get() || CFG.AUTOMAP_TRACK.get())) {
-	    MappingClient.getInstance().CheckGridCoord(c);
-	    if(CFG.AUTOMAP_TRACK.get()) {
-		MappingClient.getInstance().Track(id, c);
+	if(Boolean.TRUE.equals(isMe()) && MappingClient.initialized()) {
+	    MappingClient automapper = MappingClient.getInstance();
+	    if(automapper.GridUploadsEnabled() || automapper.TrackingEnabled()) {
+		automapper.CheckGridCoord(c);
+		if(automapper.TrackingEnabled())
+		    automapper.Track(id, c);
 	    }
 	}
 	this.rc = c;
@@ -1604,6 +1606,14 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	String name = resid();
 	if(name == null)
 	    return;
+	Drawable drawable = getattr(Drawable.class);
+	if(drawable == null)
+	    return;
+	if(anyOf(GobTag.KO, GobTag.DEAD) || drawable.hasPose("/knock") ||
+	    drawable.hasPose("/dead") || drawable.hasPose("/waterdead")) {
+	    alarmPlayed.add(id);
+	    return;
+	}
 	if(AlarmManager.play(name, this))
 	    alarmPlayed.add(id);
     }

@@ -634,12 +634,20 @@ public class Config {
 	MappingClient.init(ui.sess.glob);
 	MappingClient automapper = MappingClient.getInstance();
 	automapper.SetPlayerName(playername);
-	automapper.SetEndpoint(CFG.AUTOMAP_ENDPOINT.get());
-	automapper.EnableGridUploads(CFG.AUTOMAP_UPLOAD.get());
-	automapper.EnableTracking(CFG.AUTOMAP_TRACK.get());
+	automapper.setGenus(ui.sess.user.genus);
+	boolean customEndpoint = CFG.hasCustomAutomapEndpoint();
+	String configuredEndpoint = customEndpoint ? CFG.AUTOMAP_ENDPOINT.get().trim() : CFG.DEFAULT_AUTOMAP_ENDPOINT;
+	automapper.SetEndpoint(configuredEndpoint, customEndpoint);
+	boolean configuredEndpointValid = automapper.CheckEndpoint();
+	if(!configuredEndpointValid) {
+	    customEndpoint = false;
+	    automapper.SetEndpoint(CFG.DEFAULT_AUTOMAP_ENDPOINT, false);
+	}
+	automapper.ApplyEndpointSettings();
 	/* KamiClient: dump the automap config on startup so a console log from a
 	 * player says what they were actually running. */
 	MappingClient.log("configured: player=%s endpoint=%s gridUploads=%s tracking=%s",
-			  playername, CFG.AUTOMAP_ENDPOINT.get(), CFG.AUTOMAP_UPLOAD.get(), CFG.AUTOMAP_TRACK.get());
+			  playername, customEndpoint ? "custom" : "default",
+			  automapper.GridUploadsEnabled(), automapper.TrackingEnabled());
     }
 }

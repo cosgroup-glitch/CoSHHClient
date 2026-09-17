@@ -14,7 +14,9 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,13 +32,155 @@ public class AlarmManager {
 	// Play an alarm for gob with resname, if it has one
 	public static boolean play(String resname, Gob gob) {
 		Alarm al = alarms.get(resname);
-		if (al != null && al.enabled) {
-			if (al.knocked || !gob.anyOf(GobTag.KO, GobTag.DEAD)) {
-				al.play(gob.glob.sess.ui);
-				return true;
-			}
+		if (al != null && al.enabled && !gob.anyOf(GobTag.KO, GobTag.DEAD)) {
+			al.play(gob.glob.sess.ui);
+			return true;
 		}
 		return false;
+	}
+
+	public static synchronized boolean has(String resname) {
+		return resname != null && alarms.containsKey(resname);
+	}
+
+	public static synchronized boolean enabled(String resname, boolean fallback) {
+		Alarm alarm = alarms.get(resname);
+		return alarm == null ? fallback : alarm.enabled;
+	}
+
+	public static synchronized String sound(String resname) {
+		Alarm alarm = alarms.get(resname);
+		return alarm == null ? null : alarm.filePath;
+	}
+
+	public static synchronized int volume(String resname, int fallback) {
+		Alarm alarm = alarms.get(resname);
+		return alarm == null ? fallback : alarm.volume;
+	}
+
+	public static synchronized void create(String resname, String name, String sound, int volume) {
+		if(resname == null || resname.isEmpty() || alarms.containsKey(resname))
+			return;
+		alarms.put(resname, new Alarm(true, name == null ? "" : name, normalizeSound(sound), volume));
+		save();
+	}
+
+	public static synchronized void ensure(String resname, String name) {
+		if(!has(resname))
+			create(resname, name, "res:sfx/hud/mmap/bell1", 50);
+	}
+
+	public static synchronized void setEnabled(String resname, boolean enabled) {
+		Alarm alarm = alarms.get(resname);
+		if(alarm != null && alarm.enabled != enabled) {
+			alarm.enabled = enabled;
+			save();
+		}
+	}
+
+	public static synchronized void setSound(String resname, String filename) {
+		Alarm alarm = alarms.get(resname);
+		if(alarm != null && filename != null && !filename.isEmpty()) {
+			alarm.filePath = normalizeSound(filename);
+			save();
+		}
+	}
+
+	public static synchronized void setVolume(String resname, int volume) {
+		Alarm alarm = alarms.get(resname);
+		if(alarm != null && alarm.volume != volume) {
+			alarm.volume = volume;
+			save();
+		}
+	}
+
+	public static String normalizeSound(String sound) {
+		if(sound == null || sound.isEmpty() || sound.startsWith("res:"))
+			return sound;
+		return sound.endsWith(".wav") ? sound : sound + ".wav";
+	}
+
+	public static void preview(String sound, int volume, UI ui) {
+		if(sound == null || sound.isEmpty() || ui == null)
+			return;
+		if(sound.startsWith("res:")) {
+			String name = sound.substring(4);
+			Indir<Resource> resid = Resource.local().load(name);
+			ui.sess.glob.loader.defer(() -> {
+				try {
+					ui.sfx(new Audio.VolAdjust(Audio.fromres(resid.get()), volume / 50.0));
+				} catch(RuntimeException e) {
+					ui.error("Could not play " + name);
+				}
+			}, null);
+			return;
+		}
+		File file = new File(alarmDir(), normalizeSound(sound));
+		if(!file.exists()) {
+			ui.error("Could not play " + file.getAbsolutePath());
+			return;
+		}
+		try {
+			AudioInputStream in = AudioSystem.getAudioInputStream(file);
+			AudioFormat tgtFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2, 4, 44100, false);
+			AudioInputStream pcmStream = AudioSystem.getAudioInputStream(tgtFormat, in);
+			ui.sfx(new Audio.VolAdjust(new Audio.PCMClip(pcmStream, 2, 2), volume / 50.0));
+		} catch(UnsupportedAudioFileException | IOException e) {
+			new Warning(e, "could not play alarm " + file).issue();
+		}
+	}
+
+	public static synchronized String resourceForIcon(String iconResource, String iconName) {
+		if(iconResource == null)
+			return null;
+		if(alarms.containsKey(iconResource))
+			return iconResource;
+		for(String resource : alarms.keySet()) {
+			if(iconResource.equals(Radar.iconForGob(resource)))
+				return resource;
+		}
+		String byBasename = uniqueResourceMatch(basename(iconResource), false);
+		if(byBasename != null)
+			return byBasename;
+		return uniqueResourceMatch(normalizeName(iconName), true);
+	}
+
+	private static String uniqueResourceMatch(String value, boolean alarmName) {
+		if(value == null || value.isEmpty())
+			return null;
+		String match = null;
+		for(Map.Entry<String, Alarm> entry : alarms.entrySet()) {
+			String candidate = alarmName ? normalizeName(entry.getValue().alarmName) : basename(entry.getKey());
+			boolean matches = alarmName ? (candidate.equals(value) || candidate.startsWith(value + " ") || value.startsWith(candidate + " ")) : candidate.equals(value);
+			if(matches) {
+				if(match != null)
+					return null;
+				match = entry.getKey();
+			}
+		}
+		return match;
+	}
+
+	private static String basename(String resource) {
+		if(resource == null)
+			return null;
+		int split = resource.lastIndexOf('/');
+		return normalizeName(split < 0 ? resource : resource.substring(split + 1));
+	}
+
+	private static String normalizeName(String name) {
+		return name == null ? null : name.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
+	}
+
+	public static List<String> soundFiles() {
+		List<String> sounds = new ArrayList<>();
+		File[] files = alarmDir().listFiles((dir, name) -> name.toLowerCase().endsWith(".wav"));
+		if(files != null) {
+			for(File file : files)
+				sounds.add(file.getName());
+		}
+		Collections.sort(sounds, String.CASE_INSENSITIVE_ORDER);
+		return sounds;
 	}
 
 	// Load settings from file or use defaults if file does not exist
@@ -56,18 +200,10 @@ public class AlarmManager {
 			for(String s : Files.readAllLines(Paths.get(config.toURI()), StandardCharsets.UTF_8)) {
 				String[] split = s.split("(;)");
 				if(!alarms.containsKey(split[0]))
-					alarms.put(split[0], new Alarm(Boolean.parseBoolean(split[1]), split[2], split[3], Integer.parseInt(split[4]), Boolean.parseBoolean(split[5])));
+					alarms.put(split[0], new Alarm(Boolean.parseBoolean(split[1]), split[2], split[3], Integer.parseInt(split[4])));
 			}
 		} catch(IOException e) {
 			e.printStackTrace();
-		}
-	}
-
-	// Loads settings from the list
-	public static void load(AlarmWindow.AlarmList list) {
-		alarms.clear();
-		for(AlarmWindow.AlarmItem ai : list.items) {
-			alarms.put(ai.getGobResname(), new Alarm(ai.getEnabled(), ai.getAlarmName(), ai.getAlarmFilename(), ai.getVolume(), ai.getKnocked()));
 		}
 	}
 
@@ -77,23 +213,13 @@ public class AlarmManager {
 			Files.createDirectories(configFile().toPath().getParent());
 			BufferedWriter bw = Files.newBufferedWriter(Paths.get(configFile().toURI()), StandardCharsets.UTF_8);
 			for(Map.Entry<String, Alarm> e : alarms.entrySet()) {
-				bw.write(e.getKey() + ";" + e.getValue().enabled + ";" + e.getValue().alarmName + ";" + e.getValue().filePath.replace(".wav", "") + ";" + e.getValue().volume + ";" + e.getValue().knocked+"\n");
+				bw.write(e.getKey() + ";" + e.getValue().enabled + ";" + e.getValue().alarmName + ";" + e.getValue().filePath.replace(".wav", "") + ";" + e.getValue().volume + ";false\n");
 			}
 			bw.flush();
 			bw.close();
 		} catch(IOException e) {
 			e.printStackTrace();
 		}
-	}
-
-	public static AlarmWindow.AlarmItem[] getAlarmItems() {
-		AlarmWindow.AlarmItem[] alarmItems = new AlarmWindow.AlarmItem[alarms.size()];
-		Iterator<Map.Entry<String, Alarm>> it = alarms.entrySet().iterator();
-		for(int i=0; i<alarmItems.length; i++) {
-			Map.Entry<String, Alarm> e = it.next();
-			alarmItems[i] = new AlarmWindow.AlarmItem(e.getKey(), e.getValue().enabled, e.getValue().alarmName, e.getValue().filePath, e.getValue().volume, e.getValue().knocked);
-		}
-		return alarmItems;
 	}
 
 	// Loads the default settings
@@ -166,35 +292,18 @@ public class AlarmManager {
 	public static class Alarm {
 		public String filePath;
 		public int volume;
-		public boolean enabled, knocked;
+		public boolean enabled;
 		public String alarmName;
 
-		public Alarm(boolean enabled, String alarmName, String filePath, int volume, boolean knocked) {
+		public Alarm(boolean enabled, String alarmName, String filePath, int volume) {
 			this.enabled = enabled;
 			this.filePath = filePath;
 			this.volume = volume;
-			this.knocked = knocked;
 			this.alarmName = alarmName;
 		}
 
 		public void play(UI ui) {
-			String filePath2 = filePath.endsWith(".wav") ? filePath : filePath + ".wav";
-			File file = new File(alarmDir(), filePath2);
-			if(!file.exists()) {
-				System.out.println("Error while playing an alarm, file " + file.getAbsolutePath() + " does not exist!");
-				return;
-			}
-			try {
-				AudioInputStream in = AudioSystem.getAudioInputStream(file);
-				AudioFormat tgtFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2,4, 44100, false);
-				AudioInputStream pcmStream = AudioSystem.getAudioInputStream(tgtFormat, in);
-				Audio.CS klippi = new Audio.PCMClip(pcmStream, 2, 2);
-                ui.sfx(new Audio.VolAdjust(klippi, volume/50.0));
-			} catch(UnsupportedAudioFileException e) {
-				e.printStackTrace();
-			} catch(IOException e) {
-				e.printStackTrace();
-			}
+			preview(filePath, volume, ui);
 		}
 	}
 }

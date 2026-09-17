@@ -52,6 +52,7 @@ public class MapFile {
     public final ResCache store;
     public final String filename;
     public final Collection<Long> knownsegs = new HashSet<>();
+    private final Set<Long> unreadableSegments = new HashSet<>();
     public final Collection<Marker> markers = new ArrayList<>();
     public final Map<UID, me.ender.minimap.SMarker> smarkers = new HashMap<>();
     public volatile int markerseq = 0;
@@ -1615,6 +1616,8 @@ public class MapFile {
 
     public final BackCache<Long, Segment> segments = new BackCache<>(5, id -> {
 	    checklock();
+	    if(unreadableSegments.contains(id))
+		return(null);
 	    InputStream fp;
 	    try {
 		fp = sfetch("seg-%x", id);
@@ -1638,7 +1641,7 @@ public class MapFile {
 		    throw(new Message.FormatError("Unknown segment data version: " + ver));
 		}
 	    } catch(Message.BinError e) {
-		warn(e, "error when loading segment %x: %s", id, e);
+		unreadableSegments.add(id);
 		return(null);
 	    }
 	}, (id, seg) -> {

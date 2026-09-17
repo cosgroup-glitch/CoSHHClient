@@ -32,6 +32,22 @@ public class Radar {
 	}
 	return null;
     }
+
+    public static String iconForGob(String gobResource) {
+	return gob2icon.get(gobResource);
+    }
+
+    public static String gobForIcon(String iconResource) {
+	String match = null;
+	for(Map.Entry<String, String> entry : gob2icon.entrySet()) {
+	    if(Objects.equals(iconResource, entry.getValue())) {
+		if(match != null)
+		    return null;
+		match = entry.getKey();
+	    }
+	}
+	return match;
+    }
     
     public static void addCustomSettings(GobIcon.Settings.Loader loader, UI ui) {
 	List<RadarItemVO> items = load(Config.loadJarFile(CONFIG_JSON));

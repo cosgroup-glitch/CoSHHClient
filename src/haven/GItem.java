@@ -37,6 +37,7 @@ import haven.render.*;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import integrations.food.FoodService;
+import integrations.mapv4.MappingClient;
 
 import static haven.WItem.*;
 
@@ -356,7 +357,7 @@ public class GItem extends AWidget implements ItemInfo.SpriteOwner, GSprite.Owne
 	    if(ItemData.DBG) {info.add(new ItemData.DebugInfo(this));}
 	    this.info = info;
 	    try {
-		if (CFG.AUTOFOOD_TRACK.get()) {
+		if (MappingClient.initialized() && MappingClient.getInstance().FoodTrackingEnabled()) {
 		    FoodService.checkFood(info, getres(), itemq.get().single().value, ui.sess.user.genus);
 		}
 	    } catch (Exception ex) {}

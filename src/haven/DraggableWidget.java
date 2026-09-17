@@ -18,6 +18,7 @@ public class DraggableWidget extends Widget {
     private boolean draggable = true;
     private boolean customPosition = false;
     private boolean contentsVisible = true;
+    private Coord defaultSize;
     
     public DraggableWidget(String name) {
 	this.name = name;
@@ -31,6 +32,24 @@ public class DraggableWidget extends Widget {
     public boolean draggable() {return draggable;}
 
     public boolean hasCustomPosition() {return customPosition;}
+
+    public String widgetName() {return name;}
+
+    public void resetPosition(Coord c) {
+	this.c = c;
+	customPosition = true;
+	show();
+	updateCfg();
+    }
+
+    public void resetSize() {
+	WidgetCfg defaults = WidgetCfg.getDefault(name);
+	Coord size = ((defaults != null) && (defaults.sz != null)) ? defaults.sz : defaultSize;
+	if((size == null) || (size.x <= 0) || (size.y <= 0))
+	    return;
+	resize(size);
+	updateCfg();
+    }
 
     public boolean contentsVisible() {return contentsVisible;}
 
@@ -96,8 +115,12 @@ public class DraggableWidget extends Widget {
     }
 
     protected boolean hitEye(Coord c) {
-	return guiEditMode() && c.isect(eyeCoord(), EYE_SZ);
+	return showEditEye() && guiEditMode() && c.isect(eyeCoord(), EYE_SZ);
     }
+
+    protected boolean showEditEye() {
+	return true;
+	}
 
     private void toggleContentsVisible() {
 	contentsVisible = !contentsVisible;
@@ -149,7 +172,8 @@ public class DraggableWidget extends Widget {
 	Tex tdim = Text.renderstroked(String.format("%dpx by %dpx", sz.x, sz.y), DFND).tex();
 	g.aimage(tdim, sz.div(2), 0.5, 0.5);
 	g.chcolor();
-	drawEye(g);
+	if(showEditEye())
+	    drawEye(g);
     }
 
     @Override
@@ -207,12 +231,17 @@ public class DraggableWidget extends Widget {
     }
     
     protected void initCfg() {
+	if(defaultSize == null)
+	    defaultSize = sz;
 	cfg = WidgetCfg.get(name);
 	customPosition = (cfg != null) && cfg.getValue("custom-position", false);
-	contentsVisible = (cfg == null) ? initialContentsVisible() : cfg.getValue("contents-visible", initialContentsVisible());
+	contentsVisible = !showEditEye() || ((cfg == null) ? initialContentsVisible() :
+		cfg.getValue("contents-visible", initialContentsVisible()));
 	if(cfg != null) {
 	    c = cfg.c == null ? c : cfg.c;
 	    sz = cfg.sz == null ? sz : cfg.sz;
+	    if(!showEditEye() && !cfg.getValue("contents-visible", true))
+		updateCfg();
 	} else {
 	    updateCfg();
 	}

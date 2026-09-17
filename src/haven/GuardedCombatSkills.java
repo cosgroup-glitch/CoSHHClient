@@ -170,11 +170,11 @@ public class GuardedCombatSkills {
 	}
 
 	boolean canUse(Fightsess fs, Fightview fv) {
-	    return fs.ownOpening(fv, opening) >= threshold(this);
+	    return fs.ownOpening(fv, opening) >= Math.max(10, threshold(this));
 	}
 
 	String reason(Fightsess fs, Fightview fv) {
-	    return String.format("%s waits for your %s to be at least %d%%", name, openingLabel(opening), threshold(this));
+	    return String.format("%s waits for your %s to be at least %d%%", name, openingLabel(opening), Math.max(10, threshold(this)));
 	}
 
 	String rulePrefix() {return "your " + openingLabel(opening) + " at least ";}

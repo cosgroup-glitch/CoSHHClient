@@ -159,6 +159,7 @@ public class MappingClient {
     }
     
     private boolean gridEnabled;
+    private boolean customEndpoint;
     
     /***
      * Enable grid data/image upload for this execution.  Must be called each time the client is started.
@@ -166,6 +167,31 @@ public class MappingClient {
      */
     public void EnableGridUploads(boolean enabled) {
 	gridEnabled = enabled;
+    }
+
+    public void ApplyEndpointSettings() {
+	EnableGridUploads(!customEndpoint || CFG.AUTOMAP_UPLOAD.get());
+	EnableTracking(!customEndpoint || CFG.AUTOMAP_TRACK.get());
+    }
+
+    public boolean GridUploadsEnabled() {
+	return gridEnabled;
+    }
+
+    public boolean TrackingEnabled() {
+	return trackingEnabled;
+    }
+
+    public boolean MarkerUploadsEnabled() {
+	return !customEndpoint || CFG.AUTOMAP_UPLOAD_MARKERS.get();
+    }
+
+    public boolean FoodTrackingEnabled() {
+	return !customEndpoint || CFG.AUTOFOOD_TRACK.get();
+    }
+
+    public boolean UsesCustomEndpoint() {
+	return customEndpoint;
     }
     
     private PositionUpdates pu = new PositionUpdates();
@@ -183,6 +209,15 @@ public class MappingClient {
      */
     public void SetEndpoint(String endpoint) {
 	this.endpoint = endpoint;
+    }
+
+    public void SetEndpoint(String endpoint, boolean customEndpoint) {
+	this.endpoint = endpoint;
+	this.customEndpoint = customEndpoint;
+    }
+
+    public String GetEndpoint() {
+	return endpoint;
     }
     
     private String playerName;
@@ -372,11 +407,19 @@ public class MappingClient {
 	public void run() {
 	    if(mapfile.lock.readLock().tryLock()) {
 		try {
+		    Set<Long> unavailableSegments = new HashSet<>();
 		    List<MarkerData> markers = mapfile.markers.stream().filter(m -> uploadableMarker(m, uploadCheck)).map(m -> {
+			if(unavailableSegments.contains(m.seg))
+			    return null;
+			MapFile.Segment segment = mapfile.segments.get(m.seg);
+			if(segment == null) {
+			    unavailableSegments.add(m.seg);
+			    return null;
+			}
 			Coord mgc = new Coord(Math.floorDiv(m.tc.x, 100), Math.floorDiv(m.tc.y, 100));
-			Indir<MapFile.Grid> indirGrid = mapfile.segments.get(m.seg).grid(mgc);
+			Indir<MapFile.Grid> indirGrid = segment.grid(mgc);
 			return new MarkerData(m, indirGrid);
-		    }).collect(Collectors.toList());
+		    }).filter(Objects::nonNull).collect(Collectors.toList());
 
 		    if(!submit(new ProcessMapper(mapfile, markers, genus), 15, TimeUnit.SECONDS))
 			warn("Automap: could not queue marker processing.");
@@ -461,7 +504,7 @@ public class MappingClient {
 			    continue;
 			}
 
-			if (md.m instanceof PMarker)
+			if (customEndpoint && md.m instanceof PMarker)
 			    if (!uploadColors.contains(((PMarker) md.m).color)) {
 				skipColor++;
 				continue;
