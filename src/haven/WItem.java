@@ -449,6 +449,7 @@ public class WItem extends Widget implements DTarget {
 	} else if(ev.b == 3) {
 	    synchronized (rClickListeners) {
 		if(rClickListeners.isEmpty()) {
+		    FlowerMenu.expectMenu(ui);
 		    FlowerMenu.lastItem(this);
 		    item.wdgmsg("iact", ev.c, ui.modflags());
 		} else {
@@ -484,6 +485,7 @@ public class WItem extends Widget implements DTarget {
     
     
     public void rclick(Coord c, int flags) {
+	FlowerMenu.expectMenu(ui);
 	FlowerMenu.lastGob(null);
 	item.wdgmsg("iact", c, flags);
     }

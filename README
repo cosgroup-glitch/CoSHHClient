@@ -43,8 +43,8 @@ GitHub Actions will build the package and publish a GitHub Release with
 `Install-KamisLabyrinthClient.bat', `KamisLabyrinthClient.zip', and
 `update.json'. New users should download `Install-KamisLabyrinthClient.bat'
 from the latest release page and run it. The installer downloads the
-latest zip, verifies it, installs the client into the user's LocalAppData
-folder, creates shortcuts, and starts the client.
+latest zip, verifies it, installs the client into a `KamisLabyrinthClient'
+folder on the user's Desktop, creates shortcuts, and starts the client.
 
 Users who prefer a portable install can download `KamisLabyrinthClient.zip',
 extract it, and run `KamisLabyrinthClient.bat'. After either install path,

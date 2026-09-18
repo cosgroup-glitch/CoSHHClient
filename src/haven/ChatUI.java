@@ -1908,7 +1908,8 @@ public class ChatUI extends Widget {
     public void mousemove(MouseMoveEvent ev) {
 	super.mousemove(ev);
 	if(mm != null)
-	    this.c = DraggableWidget.snapBottomLeft(this.c.add(ev.c.sub(moff)), sz);
+	    this.c = DraggableWidget.snapCenterLine(this,
+		DraggableWidget.snapBottomLeft(this.c.add(ev.c.sub(moff)), sz), sz);
 	if(rdm != null) {
 	    Coord d = this.c.add(ev.c).sub(rdpos);
 	    int w = rdsz.x, h = rdsz.y;

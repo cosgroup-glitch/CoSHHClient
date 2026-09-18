@@ -44,6 +44,7 @@ import static haven.KeyBinder.*;
 public class Fightsess extends Widget {
     private static final Coord off = new Coord(UI.scale(32), UI.scale(32));
     private static final double SEMI_REDUCER_MIN_DISTANCE = 3.5;
+    private static final double OPENING_DECAY_RATE = 1.7;
     private static final Coord INACTIVE_DRAGGER_BASE_SZ = UI.scale(new Coord(360, 180));
     private static final Coord INACTIVE_DRAGGER_MIN_SZ = UI.scale(new Coord(120, 70));
     public static final Text.Foundry fnd = new Text.Foundry(Text.sans.deriveFont(Font.BOLD), 14);
@@ -99,6 +100,8 @@ public class Fightsess extends Widget {
     private CombatReducerMode reducerMode = CFG.AUTO_COMBAT_REDUCER_START.get();
     private double reducerTimer = 0;
     private QueuedGuardedSkill guardedSkill;
+    private int pendingUserMove = -1;
+    private boolean pendingUserMoveLoaded = false;
     private final Collection<InactiveBuff> inactivebuffs = new ArrayList<>();
     private static Collection<OpeningSample> lastOpeningSamples = Collections.emptyList();
     private static final double MIN_MEASURED_OPENING_DECAY = 0.5;
@@ -307,6 +310,8 @@ public class Fightsess extends Widget {
     private void autoCombatReducer(double dt) {
 	if(!active || fv == null || reducerMode == CombatReducerMode.OFF)
 	    return;
+	if(!CFG.AUTO_COMBAT_REDUCER_OVERRIDE_USER_INPUTS.get() && pendingUserMove >= 0)
+	    return;
 	if(hasLoadedMove())
 	    return;
 	reducerTimer -= dt;
@@ -499,7 +504,7 @@ public class Fightsess extends Widget {
     }
     
     private static double openingDecayRate() {
-	return(Utils.clip(CFG.COMBAT_UI_OPENING_DECAY.get(), 0, 50) / 10.0);
+	return(OPENING_DECAY_RATE);
     }
     
     private void addinactivebuff(Buff buff, Coord center, Coord dc, boolean enemy) {
@@ -1235,6 +1240,8 @@ public class Fightsess extends Widget {
 	Action act = actions[fn];
 	if(act == null)
 	    return false;
+	pendingUserMove = fn;
+	pendingUserMoveLoaded = false;
 	try {
 	    String resname = act.res.get().name;
 	    if(CFG.GUARDED_COMBAT_SKILLS_ENABLED.get() && GuardedCombatSkills.enabled(resname) && !GuardedCombatSkills.canUse(resname, this, fv)) {
@@ -1299,7 +1306,13 @@ public class Fightsess extends Widget {
 	} else if(msg == "use") {
 	    this.use = Utils.iv(args[0]);
 	    this.useb = (args.length > 1) ? Utils.iv(args[1]) : -1;
+	    if((pendingUserMove == this.use) || (pendingUserMove == this.useb))
+		pendingUserMoveLoaded = true;
 	} else if(msg == "used") {
+	    if(pendingUserMoveLoaded) {
+		pendingUserMove = -1;
+		pendingUserMoveLoaded = false;
+	    }
 	} else {
 	    super.uimsg(msg, args);
 	}

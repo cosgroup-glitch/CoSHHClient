@@ -2462,6 +2462,8 @@ public class MapView extends PView implements DTarget, Console.Directory {
 	    }
 	} else if((grab != null) && grab.mmousedown(ev.c, ev.b)) {
 	} else {
+	    if(ev.b == 3)
+		FlowerMenu.expectMenu(ui);
 	    new Click(ev.c, ev.b).run();
 	}
 	return(true);

@@ -41,6 +41,7 @@ public abstract class Polity extends Widget {
     protected Widget mw;
     private int nextmemb = 0;
     private int actiony = -1;
+    private static final Set<String> warnedBadRows = Collections.synchronizedSet(new HashSet<>());
 
     public abstract String type();
 
@@ -49,6 +50,7 @@ public abstract class Polity extends Widget {
     public class Member {
 	public final Integer id;
 	public final int order;
+	public int group = -1;
 
 	public Member(Integer id) {
 	    this.id = id;
@@ -58,6 +60,7 @@ public abstract class Polity extends Widget {
 	public Member(Member p) {
 	    this.id = p.id;
 	    this.order = p.order;
+	    this.group = p.group;
 	}
 
 	public Text rname() {
@@ -73,6 +76,16 @@ public abstract class Polity extends Widget {
 
 	public String name() {
 	    return(rname().text);
+	}
+
+	private Text grouptag = null;
+	private int grouptagGroup = Integer.MIN_VALUE;
+	Text grouptag() {
+	    if((grouptag == null) || (grouptagGroup != group)) {
+		grouptag = Text.render("[" + group + "]");
+		grouptagGroup = group;
+	    }
+	    return(grouptag);
 	}
     }
 
@@ -103,7 +116,20 @@ public abstract class Polity extends Widget {
 
 	protected Widget makeitem(Member m, int idx, Coord sz) {
 	    return(new ItemWidget<Member>(this, sz, m) {
-		    public void draw(GOut g) {item.draw(g);}
+		    public void draw(GOut g) {
+			try {
+			    item.draw(g);
+			} catch(Throwable t) {
+			    g.chcolor();
+			    if(warnedBadRows.add(item.id + "|" + item.group))
+				new Warning(t, String.format("member row draw failed (id=%s, group=%d) - skipping row", item.id, item.group)).level(Warning.ERROR).issue();
+			}
+			if(item.group >= 0) {
+			    g.chcolor(210, 210, 210, 255);
+			    g.aimage(item.grouptag().tex(), Coord.of(g.sz().x - UI.scale(5), UI.scale(10)), 1.0, 0.5);
+			    g.chcolor();
+			}
+		    }
 		});
 	}
 
@@ -303,7 +329,10 @@ public abstract class Polity extends Widget {
 	} else if(msg == "add") {
 	    Integer id = INT.of(args[0]);
 	    synchronized(this) {
-		add(parsememb(args, memb.get(id)));
+		Member pm = parsememb(args, memb.get(id));
+		if(args.length > 1)
+		    pm.group = INT.of(args[1]);
+		add(pm);
 	    }
 	} else if(msg == "rm") {
 	    Integer id = INT.of(args[0]);

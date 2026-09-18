@@ -901,8 +901,12 @@ public class UI {
     
     public void keydown(KeyEvent ev) {
 	setmods(ev);
-	if(!dispatch(root, new KeyDownEvent(ev)))
+	KeyDownEvent kev = new KeyDownEvent(ev);
+	if(!dispatch(root, kev)) {
+	    if(FlowerMenu.consumePendingKey(this, kev))
+		return;
 	    dispatch(root, new GlobKeyEvent(ev));
+	}
     }
     
     public void keyup(KeyEvent ev) {

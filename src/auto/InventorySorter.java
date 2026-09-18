@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class InventorySorter implements Defer.Callable<Void> {
+    private static volatile String lastTrace = "No inventory sort has run yet.";
     public static final String[] EXCLUDE = new String[]{
 	"Character Sheet",
 	"Study",
@@ -46,6 +47,8 @@ public class InventorySorter implements Defer.Callable<Void> {
     private Defer.Future<Void> task;
     
     private final List<Inventory> inventories;
+    private final StringBuilder trace = new StringBuilder();
+    private long traceStart;
     
     private InventorySorter(List<Inventory> inv) {
 	this.inventories = inv;
@@ -55,7 +58,7 @@ public class InventorySorter implements Defer.Callable<Void> {
 	if(invalidCursor(inv.ui)) {return;}
 	start(new InventorySorter(Collections.singletonList(inv)), inv.ui.gui);
     }
-    
+
     public static void sortAll(GameUI gui) {
 	if(invalidCursor(gui.ui)) {return;}
 	List<Inventory> targets = new ArrayList<>();
@@ -82,19 +85,42 @@ public class InventorySorter implements Defer.Callable<Void> {
     
     @Override
     public Void call() throws InterruptedException {
+	traceStart = System.currentTimeMillis();
+	trace("start inventories=" + inventories.size());
 	for (Inventory inv : inventories) {
 	    if(inv.disposed()) {
 		cancel();
 		break;
 	    }
+	    trace("layout start items=" + inventoryItems(inv).size());
 	    doSort(inv);
+	    trace("layout messages sent");
 	}
+	lastTrace = trace.toString();
 	synchronized (lock) {
 	    if(current == this) {current = null;}
 	}
 	return null;
     }
-    
+    private void trace(String message) {
+	trace.append('+').append(System.currentTimeMillis() - traceStart).append("ms ").append(message).append('\n');
+	lastTrace = trace.toString();
+    }
+
+    public static String debugTrace() {
+	return lastTrace;
+    }
+
+    private static List<WItem> inventoryItems(Inventory inv) {
+	List<WItem> items = new ArrayList<>();
+	for(Widget wdg = inv.lchild; wdg != null; wdg = wdg.prev) {
+	    if(wdg.visible && wdg instanceof WItem && ((WItem)wdg).lsz.x * ((WItem)wdg).lsz.y == 1) {
+		items.add((WItem)wdg);
+	    }
+	}
+	return items;
+    }
+
     private void doSort(Inventory inv) {
 	boolean[][] grid = new boolean[inv.isz.x][inv.isz.y];
 	boolean[] mask = inv.sqmask;

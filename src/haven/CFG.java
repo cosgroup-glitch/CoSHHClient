@@ -75,6 +75,7 @@ public class CFG<T> {
     public static final CFG<Boolean> GUI_LOCK = new CFG<>("ui.gui_lock", true);
     public static final CFG<Boolean> GUI_EDIT_GRID = new CFG<>("ui.gui_edit_grid", false);
     public static final CFG<Integer> GUI_EDIT_GRID_SIZE = new CFG<>("ui.gui_edit_grid_size", 25);
+    public static final CFG<Boolean> GUI_EDIT_CENTER_SNAP = new CFG<>("ui.gui_edit_center_snap", false);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_HAND = new CFG<>("ui.eq_proxy.hands", true);
     public static final CFG<Boolean> UI_SHOW_EQPROXY_POUCH = new CFG<>("ui.eq_proxy.pouch", false);
     public static final CFG<Boolean> SHOW_BUILDER_WINDOW = new CFG<>("ui.builder_window.show", false);
@@ -99,12 +100,12 @@ public class CFG<T> {
     public static final CFG<Boolean> LOCK_FLOATING_STAT_WDGS = new CFG<>("ui.combat.lock_floating_stat_wdgs", false);
     public static final CFG<Boolean> DRAG_COMBAT_UI = new CFG<>("ui.combat.drag_combat_ui", false);
     public static final CFG<Boolean> KEEP_COMBAT_UI_AFTER_COMBAT = new CFG<>("ui.combat.keep_after_combat", true);
-    public static final CFG<Integer> COMBAT_UI_INACTIVE_SCALE = new CFG<>("ui.combat.inactive_scale", 25);
-    public static final CFG<Integer> COMBAT_UI_OPENING_DECAY = new CFG<>("ui.combat.opening_decay_tenths", 17);
+    public static final CFG<Integer> COMBAT_UI_INACTIVE_SCALE = new CFG<>("ui.combat.inactive_scale", 100);
     public static final CFG<Boolean> SHOW_COMBAT_DMG = new CFG<>("ui.combat.show_dmg", true);
     public static final CFG<Boolean> CLEAR_PLAYER_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_player_damage_after", true);
     public static final CFG<Boolean> CLEAR_ALL_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_all_damage_after", false);
     public static final CFG<CombatReducerMode> AUTO_COMBAT_REDUCER_START = new CFG<>("ui.combat.auto_reducer_start", CombatReducerMode.ON);
+    public static final CFG<Boolean> AUTO_COMBAT_REDUCER_OVERRIDE_USER_INPUTS = new CFG<>("ui.combat.auto_reducer_override_user_inputs", true);
     public static final CFG<Boolean> COMBAT_DEBUG_OPENING_RECOVERY = new CFG<>("ui.combat.debug.opening_recovery", false);
     public static final CFG<Boolean> GUARDED_COMBAT_SKILLS_ENABLED = new CFG<>("ui.combat.guarded_skills_enabled", true);
     public static final CFG<Set<String>> GUARDED_COMBAT_SKILLS = new CFG<>("ui.combat.guarded_skills", GuardedCombatSkills.defaultEnabled(), new TypeToken<Set<String>>(){});

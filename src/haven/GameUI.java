@@ -1719,6 +1719,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
 	if(DraggableWidget.guiEditMode() && CFG.GUI_EDIT_GRID.get())
 	    drawEditGrid(g);
+	if(DraggableWidget.guiEditMode() && CFG.GUI_EDIT_CENTER_SNAP.get())
+	    drawEditCenterLine(g);
 	int by = sz.y;
 	if(chat.visible())
 	    by = Math.min(by, chat.c.y);
@@ -1747,6 +1749,13 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    g.line(Coord.of(x, 0), Coord.of(x, sz.y), 1);
 	for(int y = step; y < sz.y; y += step)
 	    g.line(Coord.of(0, y), Coord.of(sz.x, y), 1);
+	g.chcolor();
+    }
+
+    private void drawEditCenterLine(GOut g) {
+	int x = sz.x / 2;
+	g.chcolor(DraggableWidget.EDIT_SNAP);
+	g.line(Coord.of(x, 0), Coord.of(x, sz.y), UI.scale(2));
 	g.chcolor();
     }
 
@@ -2849,10 +2858,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 
     public class GUIEditPanel extends Widget {
 	private final CheckBox grid;
+	private final CheckBox centerSnap;
 	private final TextEntry size;
 
 	public GUIEditPanel() {
-	    resize(UI.scale(220, 118));
+	    resize(UI.scale(220, 148));
 	    grid = add(new CheckBox("Snap grid") {
 		{
 		    a = CFG.GUI_EDIT_GRID.get();
@@ -2862,16 +2872,25 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 		    CFG.GUI_EDIT_GRID.set(a = val);
 		}
 	    }, UI.scale(8, 8));
-	    add(new Label("Grid px:"), UI.scale(8, 34));
+	    centerSnap = add(new CheckBox("Snap to center line") {
+		{
+		    a = CFG.GUI_EDIT_CENTER_SNAP.get();
+		}
+
+		public void set(boolean val) {
+		    CFG.GUI_EDIT_CENTER_SNAP.set(a = val);
+		}
+	    }, UI.scale(8, 34));
+	    add(new Label("Grid px:"), UI.scale(8, 64));
 	    size = add(new TextEntry(UI.scale(54), Integer.toString(CFG.GUI_EDIT_GRID_SIZE.get())) {
 		public void activate(String text) {
 		    setGridSize(text);
 		}
-	    }, UI.scale(72, 29));
+	    }, UI.scale(72, 59));
 	    size.canactivate = true;
-	    add(new Button(UI.scale(54), "Apply", false, () -> setGridSize(size.text())), UI.scale(132, 30));
-	    add(new Button(UI.scale(204), "Reset widgets...", false, GameUI.this::showWidgetResetWindow), UI.scale(8, 58));
-	    add(new Button(UI.scale(204), "GUI LOCK: ON", false, () -> CFG.GUI_LOCK.set(true)), UI.scale(8, 88));
+	    add(new Button(UI.scale(54), "Apply", false, () -> setGridSize(size.text())), UI.scale(132, 60));
+	    add(new Button(UI.scale(204), "Reset widgets...", false, GameUI.this::showWidgetResetWindow), UI.scale(8, 88));
+	    add(new Button(UI.scale(204), "GUI LOCK: ON", false, () -> CFG.GUI_LOCK.set(true)), UI.scale(8, 118));
 	}
 
 	private void setGridSize(String text) {

@@ -32,6 +32,7 @@ import com.google.gson.GsonBuilder;
 import haven.rx.Reactor;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.util.Arrays;
 
 import static java.lang.Math.*;
@@ -46,6 +47,12 @@ public class FlowerMenu extends Widget {
     public static final String PICK_ALL = "#Pick All";
     public static final FlowerList.AutoChooseCFG AUTOCHOOSE;
     private static final Gson gson;
+    private static final long PENDING_TIMEOUT = 1000;
+    private static UI pendingUI;
+    private static long pendingUntil;
+    private static int pendingChoice = -1;
+    private static UI activeUI;
+    private static int activeMenus;
     private static ITarget target;
     public final String[] options;
     private Petal autochoose;
@@ -85,9 +92,75 @@ public class FlowerMenu extends Widget {
     public static void lastTarget(ITarget target) {
 	FlowerMenu.target = target;
     }
+
+    public static void expectMenu(UI ui) {
+	synchronized(FlowerMenu.class) {
+	    pendingUI = ui;
+	    pendingUntil = System.currentTimeMillis() + PENDING_TIMEOUT;
+	    pendingChoice = -1;
+	}
+    }
+
+    private static boolean pending(UI ui) {
+	return((ui != null) && (ui == pendingUI) && (System.currentTimeMillis() <= pendingUntil));
+    }
+
+    private static boolean active(UI ui) {
+	return((ui != null) && (ui == activeUI) && (activeMenus > 0));
+    }
+
+    private static int digitChoice(Widget.KbdEvent ev) {
+	if((ev.c >= '0') && (ev.c <= '9'))
+	    return((ev.c == '0') ? 9 : (ev.c - '1'));
+	switch(ev.code) {
+	case KeyEvent.VK_1: case KeyEvent.VK_NUMPAD1: return(0);
+	case KeyEvent.VK_2: case KeyEvent.VK_NUMPAD2: return(1);
+	case KeyEvent.VK_3: case KeyEvent.VK_NUMPAD3: return(2);
+	case KeyEvent.VK_4: case KeyEvent.VK_NUMPAD4: return(3);
+	case KeyEvent.VK_5: case KeyEvent.VK_NUMPAD5: return(4);
+	case KeyEvent.VK_6: case KeyEvent.VK_NUMPAD6: return(5);
+	case KeyEvent.VK_7: case KeyEvent.VK_NUMPAD7: return(6);
+	case KeyEvent.VK_8: case KeyEvent.VK_NUMPAD8: return(7);
+	case KeyEvent.VK_9: case KeyEvent.VK_NUMPAD9: return(8);
+	case KeyEvent.VK_0: case KeyEvent.VK_NUMPAD0: return(9);
+	}
+	return(-1);
+    }
+
+    public static boolean consumePendingKey(UI ui, Widget.KeyDownEvent ev) {
+	int choice = digitChoice(ev);
+	if(choice < 0)
+	    return(false);
+	synchronized(FlowerMenu.class) {
+	    if(!pending(ui) || !active(ui))
+		return(false);
+	    pendingChoice = choice;
+	    pendingUntil = System.currentTimeMillis() + PENDING_TIMEOUT;
+	    return(true);
+	}
+    }
+
+    private static int claimPendingChoice(UI ui) {
+	synchronized(FlowerMenu.class) {
+	    if(!pending(ui))
+		return(-1);
+	    int ret = pendingChoice;
+	    pendingUI = null;
+	    pendingUntil = 0;
+	    pendingChoice = -1;
+	    return(ret);
+	}
+    }
     
     @Override
     public void destroy() {
+	synchronized(FlowerMenu.class) {
+	    if(ui == activeUI && activeMenus > 0) {
+		activeMenus--;
+		if(activeMenus == 0)
+		    activeUI = null;
+	    }
+	}
 	target = null;
 	super.destroy();
     }
@@ -270,6 +343,10 @@ public class FlowerMenu extends Widget {
     @Override
     protected void attach(UI ui) {
 	super.attach(ui);
+	synchronized(FlowerMenu.class) {
+	    activeUI = ui;
+	    activeMenus++;
+	}
 	ui.pathQueue().ifPresent(PathQueue::unclick);
 	opts = new Petal[options.length];
 	for(int i = 0; i < options.length; i++) {
@@ -280,7 +357,13 @@ public class FlowerMenu extends Widget {
 	}
     
 	forceChosen = forceChoose();
-	if(!forceChosen) {autochoose = autochoose();}
+	if(!forceChosen) {
+	    int pending = claimPendingChoice(ui);
+	    if((pending >= 0) && (pending < opts.length))
+		autochoose = opts[pending];
+	    else
+		autochoose = autochoose();
+	}
     }
     
     private Petal autochoose() {
@@ -360,8 +443,8 @@ public class FlowerMenu extends Widget {
     }
 
     public boolean keydown(KeyDownEvent ev) {
-	if((ev.c >= '0') && (ev.c <= '9')) {
-	    int opt = (ev.c == '0') ? 9 : (ev.c - '1');
+	int opt = digitChoice(ev);
+	if(opt >= 0) {
 	    if(opt < opts.length) {
 		choose(opts[opt]);
 		kg.remove();

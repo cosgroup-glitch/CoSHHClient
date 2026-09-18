@@ -26,6 +26,8 @@
 
 package haven;
 
+import auto.InventorySorter;
+
 import haven.resutil.FoodInfo;
 import haven.rx.Reactor;
 import me.ender.WindowDetector;
@@ -380,6 +382,7 @@ public class Window extends Widget {
 	buf.append("  parent-chain=").append(parentChain(this)).append('\n');
 	if(mouse != null)
 	    buf.append("  mouse-root=").append(mouse).append(" mouse-local=").append(rootxlate(mouse)).append('\n');
+	buf.append('\n').append("Inventory sorter trace:\n").append(InventorySorter.debugTrace());
 	buf.append('\n');
 	buf.append("Children draw order:\n");
 	appendTree(buf, this, "  ", false, mouse);
@@ -450,6 +453,19 @@ public class Window extends Widget {
 	    Button b = (Button)w;
 	    if((b.text != null) && (b.text.text != null))
 		buf.append(" text=").append(b.text.text);
+	}
+	if(w instanceof GItem) {
+	    GItem item = (GItem)w;
+	    buf.append(" res=").append(item.resname());
+	    buf.append(" name=").append(item.name.get("<loading>"));
+	    buf.append(" num=").append(item.num);
+	    if(item.contents != null)
+		buf.append(" contents=").append(item.contents.getClass().getName()).append("[").append(item.contents.children(GItem.class).size()).append("]");
+	}
+	if(w instanceof WItem) {
+	    GItem item = ((WItem)w).item;
+	    buf.append(" item-res=").append(item.resname());
+	    buf.append(" item-name=").append(item.name.get("<loading>"));
 	}
 	if(w instanceof Polity) {
 	    Polity p = (Polity)w;

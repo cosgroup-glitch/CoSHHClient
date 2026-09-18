@@ -135,14 +135,6 @@ public class CustomOptPanels {
 	y += UI.scale(15);
 	panel.add(new CFGSlider(UI.scale(150), 1, 100, CFG.COMBAT_UI_INACTIVE_SCALE, inactiveScale, "Out of combat combat UI scale: %d%%"), x + H_STEP, y);
 	y += STEP;
-	Label openingDecay = panel.add(new Label(String.format("Out of combat opening recovery: %.1f%%/s", CFG.COMBAT_UI_OPENING_DECAY.get() / 10.0)), x + H_STEP, y);
-	y += UI.scale(15);
-	panel.add(new CFGSlider(UI.scale(150), 0, 50, CFG.COMBAT_UI_OPENING_DECAY, openingDecay, "") {
-	    protected void updateLabel() {
-		label.settext(String.format("Out of combat opening recovery: %.1f%%/s", val / 10.0));
-	    }
-	}, x + H_STEP, y);
-	y += STEP;
 	panel.add(new Button(UI.scale(150), "Reset combat UI position", false), x + H_STEP, y)
 	    .action(() -> Fightsess.resetOffset(wnd.ui));
 	y += STEP;
@@ -222,6 +214,10 @@ public class CustomOptPanels {
 
 	y += STEP;
 	panel.add(autoReducerStartButton(UI.scale(200)), x, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Override user inputs", CFG.AUTO_COMBAT_REDUCER_OVERRIDE_USER_INPUTS,
+	    "When disabled, Auto reducer waits for manually selected combat moves to be used first."), x + H_STEP, y);
 
 	y += STEP;
 	panel.add(new Button(UI.scale(200), "Guarded skills...", false)

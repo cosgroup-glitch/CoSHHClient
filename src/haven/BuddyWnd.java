@@ -51,16 +51,30 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
     public static final int offset = UI.scale(35);
     public static final Tex online = Resource.loadtex("gfx/hud/online");
     public static final Tex offline = Resource.loadtex("gfx/hud/offline");
-    public static final Color[] gc = new Color[]{
-	Group.White.col,
-	Group.Green.col,
-	Group.Red.col,
-	Group.Blue.col,
-	Group.Cyan.col,
-	Group.Yellow.col,
-	Group.Purple.col,
-	Group.Orange.col,
-    };
+    public static final int nquick = 8;
+    public static final int ncolors = 40;
+    public static final Color[] gc = buildColorTable();
+
+    private static Color[] buildColorTable() {
+	Color[] full = new Color[255];
+	full[0] = Group.White.col;
+	full[1] = Group.Green.col;
+	full[2] = Group.Red.col;
+	full[3] = Group.Blue.col;
+	full[4] = Group.Cyan.col;
+	full[5] = Group.Yellow.col;
+	full[6] = Group.Purple.col;
+	full[7] = Group.Orange.col;
+	for(int i = nquick; i < ncolors; i++)
+	    full[i] = Color.getHSBColor((i - nquick) / (float)(ncolors - nquick), 0.6f, 0.9f);
+	for(int i = ncolors; i < full.length; i++)
+	    full[i] = full[0];
+	return(full);
+    }
+
+    public static Color gcolor(int group) {
+	return(((group >= 0) && (group < gc.length)) ? gc[group] : gc[0]);
+    }
     
     public static int defaultGroup = 0;
     public static boolean addingKinFromList = false;
@@ -164,7 +178,7 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 
 	private void chstatus(int status) {
 	    online = status;
-	    ui.message(String.format("%s is %s now.", name, online > 0 ? "ONLINE" : "OFFLINE"), gc[group], CFG.DISPLAY_KINSFX.get());
+	    ui.message(String.format("%s is %s now.", name, online > 0 ? "ONLINE" : "OFFLINE"), gcolor(group), CFG.DISPLAY_KINSFX.get());
 	}
 
 	private Text rname = null;
@@ -172,6 +186,16 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 	    if((rname == null) || !rname.text.equals(name))
 		rname = Text.render(name);
 	    return(rname);
+	}
+
+	private Text grouptag = null;
+	private int grouptagGroup = Integer.MIN_VALUE;
+	Text grouptag() {
+	    if((grouptag == null) || (grouptagGroup != group)) {
+		grouptag = Text.render("[" + group + "]");
+		grouptagGroup = group;
+	    }
+	    return(grouptag);
 	}
 
 	public Map<String, Runnable> opts() {
@@ -255,12 +279,12 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 
     public static class GroupSelector extends Widget {
 	public int group;
-	public GroupRect[] groups = new GroupRect[gc.length];
+	public GroupRect[] groups = new GroupRect[nquick];
 
 	public GroupSelector(int group) {
-	    super(new Coord(gc.length * margin3, margin3));
+	    super(new Coord(nquick * margin3, margin3));
 	    this.group = group;
-	    for (int i = 0; i < gc.length; ++i) {
+	    for (int i = 0; i < nquick; ++i) {
 		groups[i] = new GroupRect(this, i, group == i);
 		add(groups[i], new Coord(i * margin3, 0));
 	    }
@@ -272,16 +296,34 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 	public void update(int group) {
 	    if(group == this.group)
 		return;
-	    if(this.group >= 0)
+	    if((this.group >= 0) && (this.group < groups.length))
 		groups[this.group].unselect();
 	    this.group = group;
-	    if(group >= 0)
+	    if((group >= 0) && (group < groups.length))
 		groups[group].select();
 	}
 
 	public void select(int group) {
 	    update(group);
 	    changed(group);
+	}
+
+	public void selectExtended(int group) {
+	    Polity.MemberWidget member = getparent(Polity.MemberWidget.class);
+	    if((member != null) && (member.ui != null) && (member.ui.widgetid(member) >= 0) && (member.ui.widgetid(this) < 0))
+		member.wdgmsg("perm", group);
+	    else
+		select(group);
+	}
+
+	protected void attached() {
+	    super.attached();
+	    haven.groups.GroupSelectorClassifier.attached(this);
+	}
+
+	public void dispose() {
+	    haven.groups.GroupSelectorClassifier.detached(this);
+	    super.dispose();
 	}
     }
 
@@ -296,7 +338,7 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 	}
     }
 
-    private class BuddyInfo extends Widget {
+    public class BuddyInfo extends Widget {
 	private final Buddy buddy;
 	private final Avaview ava;
 	private final TextEntry nick;
@@ -420,8 +462,12 @@ public class BuddyWnd extends Widget implements Iterable<BuddyWnd.Buddy> {
 			    g.aimage(online, Coord.of(sz.y / 2), 0.5, 0.5);
 			else if(item.online == 0)
 			    g.aimage(offline, Coord.of(sz.y / 2), 0.5, 0.5);
-			g.chcolor(gc[b.group]);
-			g.aimage(b.rname().tex(), Coord.of(sz.y + margin1, sz.y / 2), 0.0, 0.5);
+			Coord namec = Coord.of(sz.y + margin1, sz.y / 2);
+			g.chcolor(gcolor(b.group));
+			g.aimage(b.rname().tex(), namec, 0.0, 0.5);
+			g.chcolor();
+			g.chcolor(210, 210, 210, 255);
+			g.aimage(b.grouptag().tex(), namec.add(b.rname().sz().x + margin1, 0), 0.0, 0.5);
 			g.chcolor();
 		    }
 

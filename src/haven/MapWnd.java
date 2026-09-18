@@ -770,7 +770,7 @@ public class MapWnd extends WindowX implements Console.Directory {
 	}
 
 	public void mark(Location loc, boolean onmap) {
-	    Marker nm = new PMarker(file, loc.seg.id, loc.tc, "New marker", BuddyWnd.gc[new Random().nextInt(BuddyWnd.gc.length)], onmap);
+	    Marker nm = new PMarker(file, loc.seg.id, loc.tc, "New marker", BuddyWnd.gc[new Random().nextInt(BuddyWnd.nquick)], onmap);
 	    file.add(nm);
 	    focus(nm);
 	}

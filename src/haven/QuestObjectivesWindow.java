@@ -74,7 +74,6 @@ public class QuestObjectivesWindow extends GameUI.Hidewnd {
 	if(id == questid) {
 	    questid = -1;
 	    body.clear();
-	    hide();
 	}
     }
 

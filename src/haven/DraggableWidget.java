@@ -10,6 +10,7 @@ public class DraggableWidget extends Widget {
     protected static final Color EDIT_SNAP = new Color(255, 221, 64, 255);
     protected static final Color EDIT_PRECISION = new Color(255, 148, 32, 255);
     private static final Coord EYE_SZ = UI.scale(18, 14);
+    private static final int CENTER_SNAP_DISTANCE = UI.scale(10);
     
     private final String name;
     private UI.Grab dm;
@@ -86,6 +87,19 @@ public class DraggableWidget extends Widget {
 	if(!CFG.GUI_EDIT_GRID.get())
 	    return c;
 	return Coord.of(snap(c.x), snap(c.y + sz.y) - sz.y);
+    }
+
+    public static Coord snapCenterLine(Widget widget, Coord c, Coord sz) {
+	if(!CFG.GUI_EDIT_CENTER_SNAP.get() || widget == null || widget.parent == null)
+	    return c;
+	GameUI gui = widget.getparent(GameUI.class);
+	if(gui == null)
+	    return c;
+	int center = widget.parent.rootpos().x + c.x + (sz.x / 2);
+	int guide = gui.rootpos().x + (gui.sz.x / 2);
+	if(Math.abs(center - guide) > CENTER_SNAP_DISTANCE)
+	    return c;
+	return Coord.of(c.x + guide - center, c.y);
     }
     
     private void stop_dragging() {
@@ -220,7 +234,8 @@ public class DraggableWidget extends Widget {
     @Override
     public void mousemove(MouseMoveEvent ev) {
 	if(dm != null) {
-	    this.c = snapBottomLeft(this.c.add(ev.c.add(doff.inv())), sz);
+	    Coord next = snapBottomLeft(this.c.add(ev.c.add(doff.inv())), sz);
+	    this.c = snapCenterLine(this, next, sz);
 	} else {
 	    super.mousemove(ev);
 	}

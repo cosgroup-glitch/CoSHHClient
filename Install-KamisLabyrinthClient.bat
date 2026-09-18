@@ -8,7 +8,8 @@ exit /b %ERRORLEVEL%
 $ErrorActionPreference = 'Stop'
 
 $appName = "kami's labyrinth Client"
-$installDir = Join-Path $env:LOCALAPPDATA 'KamisLabyrinthClient'
+$desktopDir = [Environment]::GetFolderPath('DesktopDirectory')
+$installDir = Join-Path $desktopDir 'KamisLabyrinthClient'
 $releaseBase = 'https://github.com/cosgroup-glitch/CoSHHClient/releases/latest/download'
 $manifestUrl = "$releaseBase/update.json"
 $javaUrl = 'https://adoptium.net/temurin/releases/?version=21'
@@ -154,7 +155,7 @@ try {
 
     Step 'Creating shortcuts'
     $iconPath = Join-Path $installDir 'KamisLabyrinthClient.ico'
-    $desktopShortcut = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) "$appName.lnk"
+    $desktopShortcut = Join-Path $desktopDir "$appName.lnk"
     $startMenuDir = Join-Path ([Environment]::GetFolderPath('Programs')) $appName
     $startMenuShortcut = Join-Path $startMenuDir "$appName.lnk"
     Create-Shortcut $desktopShortcut $launcher $installDir $iconPath
