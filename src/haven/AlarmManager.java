@@ -134,6 +134,9 @@ public class AlarmManager {
 	public static synchronized String resourceForIcon(String iconResource, String iconName) {
 		if(iconResource == null)
 			return null;
+		String byName = uniqueResourceMatch(normalizeName(iconName), true);
+		if(byName != null)
+			return byName;
 		if(alarms.containsKey(iconResource))
 			return iconResource;
 		for(String resource : alarms.keySet()) {
@@ -143,7 +146,7 @@ public class AlarmManager {
 		String byBasename = uniqueResourceMatch(basename(iconResource), false);
 		if(byBasename != null)
 			return byBasename;
-		return uniqueResourceMatch(normalizeName(iconName), true);
+		return null;
 	}
 
 	private static String uniqueResourceMatch(String value, boolean alarmName) {
