@@ -716,7 +716,12 @@ public class MapFile {
 	public BufferedImage olrender(Coord off, String tag) {
 	    WritableRaster buf = PUtils.imgraster(cmaps);
 	    for(Overlay ol : ols) {
-		MCache.ResOverlay olid = ol.olid.get().flayer(MCache.ResOverlay.class);
+		MCache.ResOverlay olid;
+		try {
+		    olid = ol.olid.get().flayer(MCache.ResOverlay.class);
+		} catch(Resource.NoSuchResourceException e) {
+		    continue;
+		}
 		if(!olid.tags().contains(tag))
 		    continue;
 		Color col = olcol(olid);

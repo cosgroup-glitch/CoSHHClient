@@ -480,7 +480,6 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	ui.setGUI(this);
 	ui.sess.user.genus = genus;
 	Config.initAutomapper(ui);
-	ClientUpdater.checkStartup(this);
 	Timer.start(this);
 	super.attach(ui);
     }

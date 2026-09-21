@@ -81,7 +81,7 @@ public class ClientUpdater {
 	System.exit(0);
     }
 
-    public static synchronized void checkStartup(GameUI gui) {
+    public static synchronized void checkStartup() {
 	if(startupChecked || !configured())
 	    return;
 	startupChecked = true;
@@ -90,12 +90,8 @@ public class ClientUpdater {
 		UpdateInfo update = check();
 		if(!update.newer())
 		    return;
-		if(gui != null)
-		    gui.msg("Downloading kami's labyrinth Client update " + update.version + ". The client will restart.", GameUI.MsgType.INFO);
 		install(update);
 	    } catch(Exception e) {
-		if(gui != null)
-		    gui.msg("Update failed: " + e.getMessage(), GameUI.MsgType.ERROR);
 		e.printStackTrace(Debug.log);
 	    }
 	}, "kami's labyrinth Client update check").start();
