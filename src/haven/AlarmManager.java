@@ -23,6 +23,7 @@ import java.util.Map;
 public class AlarmManager {
 
 	private static LinkedHashMap<String, Alarm> alarms = new LinkedHashMap<String, Alarm>();
+	private static LinkedHashMap<String, String> soundFolders = new LinkedHashMap<String, String>();
 
 	public static void init() {
 		installDefaults();
@@ -172,35 +173,86 @@ public class AlarmManager {
 		return name == null ? null : name.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
 	}
 
-	public static List<String> soundFiles() {
+	public static synchronized String soundFolder(String resname) {
+		String folder = soundFolders.get(resname);
+		if(folder != null && !folder.isEmpty())
+			return folder;
+		Alarm alarm = alarms.get(resname);
+		return safeFolderName(alarm == null ? basename(resname) : alarm.alarmName);
+	}
+
+	private static String safeFolderName(String name) {
+		if(name == null)
+			return "Other";
+		String safe = name.replaceAll("[\\\\/:*?\"<>|]+", " ").replaceAll("\\s+", " ").trim();
+		return safe.isEmpty() ? "Other" : safe;
+	}
+
+	public static List<String> soundFiles(String folder) {
 		List<String> sounds = new ArrayList<>();
-		File[] files = alarmDir().listFiles((dir, name) -> name.toLowerCase().endsWith(".wav"));
+		if(folder == null || folder.isEmpty())
+			return sounds;
+		File dir = new File(alarmDir(), folder);
+		File[] files = dir.listFiles((parent, name) -> name.toLowerCase().endsWith(".wav"));
 		if(files != null) {
 			for(File file : files)
-				sounds.add(file.getName());
+				sounds.add(folder.replace(File.separatorChar, '/') + "/" + file.getName());
 		}
 		Collections.sort(sounds, String.CASE_INSENSITIVE_ORDER);
+		return sounds;
+	}
+
+	public static List<SoundOption> defaultSounds() {
+		List<SoundOption> sounds = new ArrayList<>();
+		try {
+			for(String line : Files.readAllLines(defaultSoundsFile().toPath(), StandardCharsets.UTF_8)) {
+				String trimmed = line.trim();
+				if(trimmed.isEmpty() || trimmed.startsWith("#"))
+					continue;
+				String[] split = trimmed.split(";", 2);
+				if(split.length == 2 && !split[0].trim().isEmpty() && !split[1].trim().isEmpty())
+					sounds.add(new SoundOption(split[0].trim(), normalizeSound(split[1].trim())));
+			}
+		} catch(IOException e) {
+			new Warning(e, "could not load default alarm sounds").issue();
+		}
 		return sounds;
 	}
 
 	// Load settings from file or use defaults if file does not exist
 	public static void load() {
 		alarms.clear();
+		soundFolders.clear();
 		File config = configFile();
-		if(!config.exists()) {
-			defaultSettings();
-		} else {
+		if(config.exists())
 			loadFromFile(config);
-		}
+		loadFromFile(defaultConfigFile());
+		loadSoundFolders(defaultConfigFile());
 	}
 
 	// Load config from the given file
 	private static void loadFromFile(File config) {
 		try {
 			for(String s : Files.readAllLines(Paths.get(config.toURI()), StandardCharsets.UTF_8)) {
-				String[] split = s.split("(;)");
-				if(!alarms.containsKey(split[0]))
+				String[] split = s.split(";");
+				if(split.length >= 5 && !alarms.containsKey(split[0]))
 					alarms.put(split[0], new Alarm(Boolean.parseBoolean(split[1]), split[2], split[3], Integer.parseInt(split[4])));
+			}
+		} catch(IOException | NumberFormatException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static void loadSoundFolders(File config) {
+		try {
+			for(String s : Files.readAllLines(config.toPath(), StandardCharsets.UTF_8)) {
+				String[] split = s.split(";");
+				if(split.length < 4)
+					continue;
+				String sound = split[3].replace('\\', '/');
+				int slash = sound.lastIndexOf('/');
+				if(slash > 0)
+					soundFolders.put(split[0], sound.substring(0, slash));
 			}
 		} catch(IOException e) {
 			e.printStackTrace();
@@ -225,7 +277,9 @@ public class AlarmManager {
 	// Loads the default settings
 	public static void defaultSettings() {
 		alarms.clear();
+		soundFolders.clear();
 		loadFromFile(defaultConfigFile());
+		loadSoundFolders(defaultConfigFile());
 	}
 
 	public static File alarmDir() {
@@ -238,6 +292,10 @@ public class AlarmManager {
 
 	private static File defaultConfigFile() {
 		return new File(alarmDir(), "settings/defaultAlarms");
+	}
+
+	private static File defaultSoundsFile() {
+		return new File(alarmDir(), "settings/defaultSounds");
 	}
 
 	private static void installDefaults() {
@@ -304,6 +362,16 @@ public class AlarmManager {
 
 		public void play(UI ui) {
 			preview(filePath, volume, ui);
+		}
+	}
+
+	public static class SoundOption {
+		public final String name;
+		public final String value;
+
+		public SoundOption(String name, String value) {
+			this.name = name;
+			this.value = value;
 		}
 	}
 }

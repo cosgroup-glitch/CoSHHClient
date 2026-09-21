@@ -898,7 +898,7 @@ public class GobIcon extends GAttrib {
 		    w / 2, 0);
 		String resource = selectedResource(conf);
 		prev = add(new Label("Notification sound:"), prev.pos("bl").adds(0, 7));
-		AlarmSoundBox sound = new AlarmSoundBox(w - UI.scale(85),
+		AlarmSoundBox sound = new AlarmSoundBox(w - UI.scale(85), resource,
 		    AlarmManager.has(resource) ? AlarmManager.sound(resource) : "res:sfx/hud/mmap/bell1", value -> {
 			AlarmManager.ensure(resource, conf.icon.name());
 			AlarmManager.setSound(resource, value);

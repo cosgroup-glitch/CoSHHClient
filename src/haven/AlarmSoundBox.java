@@ -15,6 +15,7 @@ public class AlarmSoundBox extends SDropBox<AlarmSoundBox.SoundChoice, Widget> {
     private static final SoundChoice SELECT_FILE = new SoundChoice("Select file...", null);
     private final List<SoundChoice> choices = new ArrayList<>();
     private final Consumer<String> selected;
+    private final String folder;
 
     static class SoundChoice {
 	final String name;
@@ -26,11 +27,14 @@ public class AlarmSoundBox extends SDropBox<AlarmSoundBox.SoundChoice, Widget> {
 	}
     }
 
-    public AlarmSoundBox(int width, String initial, Consumer<String> selected) {
+    public AlarmSoundBox(int width, String resource, String initial, Consumer<String> selected) {
 	super(width, UI.scale(180), UI.scale(20));
 	this.selected = selected;
-	for(GobIcon.NotificationSetting sound : GobIcon.NotificationSetting.builtin)
-	    choices.add(new SoundChoice(sound.name, "res:" + sound.res));
+	this.folder = AlarmManager.soundFolder(resource);
+	for(AlarmManager.SoundOption sound : AlarmManager.defaultSounds())
+	    choices.add(new SoundChoice(sound.name, sound.value));
+	for(String sound : AlarmManager.soundFiles(folder))
+	    addFileChoice(sound);
 	addFileChoice(initial);
 	choices.add(SELECT_FILE);
 	select(initial);
@@ -75,11 +79,11 @@ public class AlarmSoundBox extends SDropBox<AlarmSoundBox.SoundChoice, Widget> {
 		    super.change(previous);
 		} else {
 		    try {
-			Path target = AlarmManager.alarmDir().toPath().resolve(path.getFileName().toString());
+			Path target = AlarmManager.alarmDir().toPath().resolve(folder).resolve(path.getFileName().toString());
 			Files.createDirectories(target.getParent());
 			if(!path.toAbsolutePath().normalize().equals(target.toAbsolutePath().normalize()))
 			    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING);
-			String value = target.getFileName().toString();
+			String value = AlarmManager.alarmDir().toPath().relativize(target).toString().replace(File.separatorChar, '/');
 			addFileChoice(value);
 			select(value);
 			selected.accept(value);

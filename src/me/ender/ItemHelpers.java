@@ -21,7 +21,7 @@ public class ItemHelpers {
 	UI ui = item.ui;
 	if(ui == null) {return true;}
 	String msg;
-	if(CFG.PRESERVE_SYMBEL.get() && (msg = preserveDishes(item, ui)) != null) {
+	if((msg = preserveDishes(item, ui)) != null) {
 	    ui.message(msg, GameUI.MsgType.ERROR);
 	    return false;
 	}

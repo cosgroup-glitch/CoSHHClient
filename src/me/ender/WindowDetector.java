@@ -5,7 +5,6 @@ import auto.InventorySorter;
 import haven.*;
 import haven.rx.CharterBook;
 import haven.rx.Reactor;
-import me.ender.ui.CFGBox;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -281,9 +280,6 @@ public class WindowDetector {
 	if(food != null) {
 	    addTableFoodStatButtons(wnd, food);
 	}
-	
-	btn.c = wnd.add(new CFGBox("Preserve cutlery", CFG.PRESERVE_SYMBEL), btn.pos("ul"))
-	    .settip("Prevent eating from this table if some of the cutlery is almost broken").pos("bl");
 	
 	wnd.add(new Button(55, "Salt All", false, () -> Actions.saltFood(wnd.ui.gui)), btn.pos("ur").adds(-55, -20))
 	    .settip("Salt all food");

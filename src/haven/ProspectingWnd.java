@@ -1,6 +1,7 @@
 package haven;
 
 import haven.render.*;
+import haven.sprites.ClueSprite;
 import me.ender.ClientUtils;
 import me.ender.Reflect;
 
@@ -77,11 +78,12 @@ public class ProspectingWnd extends WindowX {
     }
     
     public static void overlay(Gob gob, Gob.Overlay overlay) {
+	double a1 = Reflect.getFieldValueDouble(overlay.spr, "a1");
+	double a2 = Reflect.getFieldValueDouble(overlay.spr, "a2");
+	GameUI gui = gob.glob.sess.ui.gui;
+	if(gui != null && gui.mapfile != null)
+	    gui.mapfile.view.addSprite(new ClueSprite(gob.rc, a1, a2, 2, 500, 60));
 	if(!QUALITIES.isEmpty()) {
-	    
-	    double a1 = Reflect.getFieldValueDouble(overlay.spr, "a1");
-	    double a2 = Reflect.getFieldValueDouble(overlay.spr, "a2");
-	    
 	    EFFECTS.add(new Dowse(gob, a1, a2, QUALITIES.remove()));
 	    attachEffect();
 	}
