@@ -62,6 +62,7 @@ public class WItem extends Widget implements DTarget {
     private Message csdt = Message.nil;
     private final List<Action3<WItem, Coord, Integer>> rClickListeners = new LinkedList<>();
     private boolean checkDrop = false;
+    private boolean miningDropSent = false;
     private final CFG.Observer<Boolean> resetTooltip = cfg -> clearLongTip();
     private final Action0 itemMatched = this::itemMatched;
     
@@ -255,6 +256,10 @@ public class WItem extends Widget implements DTarget {
 	    lspr = spr;
 	}
 	checkDrop();
+	if(!miningDropSent && MiningAutoDrop.shouldDrop(this)) {
+	    miningDropSent = true;
+	    item.drop();
+	}
     }
     
     public void draw(GOut g) {

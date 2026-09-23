@@ -67,6 +67,26 @@ public class CFG<T> {
     public static final CFG<Integer> AUTO_PICK_RADIUS = new CFG<>("general.auto_pick_radius", 55);
     public static final CFG<Boolean> AUTO_DROP_RESPECT_FILTER = new CFG<>("general.auto_drop.filter", true);
     public static final CFG<Boolean> AUTO_DROP_PARASITES = new CFG<>("general.auto_drop_parasites", false);
+    public static final CFG<Boolean> MINING_AUTO_DROP_ENABLED = new CFG<>("mining.auto_drop.enabled", false);
+    public static final CFG<Boolean> MINING_AUTO_DROP_CONTAINERS = new CFG<>("mining.auto_drop.containers", false);
+    public static final CFG<Boolean> MINING_AUTO_DROP_CURSOR_ONLY = new CFG<>("mining.auto_drop.cursor_only", false);
+    public static final CFG<Boolean> MINING_AUTO_DROP_STONES = new CFG<>("mining.auto_drop.stones", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_STONES_Q = new CFG<>("mining.auto_drop.stones_q", 30);
+    public static final CFG<Boolean> MINING_AUTO_DROP_COAL = new CFG<>("mining.auto_drop.coal", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_COAL_Q = new CFG<>("mining.auto_drop.coal_q", 30);
+    public static final CFG<Boolean> MINING_AUTO_DROP_ORES = new CFG<>("mining.auto_drop.ores", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_ORES_Q = new CFG<>("mining.auto_drop.ores_q", 30);
+    public static final CFG<Boolean> MINING_AUTO_DROP_PRECIOUS = new CFG<>("mining.auto_drop.precious", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_PRECIOUS_Q = new CFG<>("mining.auto_drop.precious_q", 999);
+    public static final CFG<Boolean> MINING_AUTO_DROP_CURIOS = new CFG<>("mining.auto_drop.curios", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_CURIOS_Q = new CFG<>("mining.auto_drop.curios_q", 30);
+    public static final CFG<Boolean> MINING_AUTO_DROP_QUARRYARTZ = new CFG<>("mining.auto_drop.quarryartz", false);
+    public static final CFG<Integer> MINING_AUTO_DROP_QUARRYARTZ_Q = new CFG<>("mining.auto_drop.quarryartz_q", 30);
+    public static final CFG<Boolean> MINING_PREVENT_UNSAFE_SELECTION = new CFG<>("mining.safety.prevent_unsafe_selection", false);
+    public static final CFG<Boolean> MINING_STOP_UNSUPPORTED = new CFG<>("mining.safety.stop_unsupported", false);
+    public static final CFG<Boolean> MINING_STOP_SUPPORT_50 = new CFG<>("mining.safety.stop_support_50", false);
+    public static final CFG<Boolean> MINING_STOP_SUPPORT_25 = new CFG<>("mining.safety.stop_support_25", false);
+    public static final CFG<Boolean> MINING_STOP_LOOSE_ROCK = new CFG<>("mining.safety.stop_loose_rock", false);
     public static final CFG<Theme> THEME = new CFG<>("ui.theme", Theme.Pretty);
     public static final CFG<Boolean> DISABLE_UI_HIDING = new CFG<>("ui.disable_ui_hide", true);
     public static final CFG<Boolean> UI_DISABLE_CONTAINER_POS = new CFG<>("ui.disable_container_pos", false);
@@ -100,6 +120,8 @@ public class CFG<T> {
     public static final CFG<Boolean> KEEP_COMBAT_UI_AFTER_COMBAT = new CFG<>("ui.combat.keep_after_combat", true);
     public static final CFG<Integer> COMBAT_UI_INACTIVE_SCALE = new CFG<>("ui.combat.inactive_scale", 100);
     public static final CFG<Boolean> SHOW_COMBAT_DMG = new CFG<>("ui.combat.show_dmg", true);
+    public static final CFG<Boolean> SHOW_COMBAT_AGILITY_ESTIMATE = new CFG<>("ui.combat.show_agility_estimate", true);
+    public static final CFG<Boolean> SHOW_COMBAT_DAMAGE_PREDICTION = new CFG<>("ui.combat.show_damage_prediction", true);
     public static final CFG<Boolean> CLEAR_PLAYER_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_player_damage_after", true);
     public static final CFG<Boolean> CLEAR_ALL_DMG_AFTER_COMBAT = new CFG<>("ui.combat.clear_all_damage_after", false);
     public static final CFG<CombatReducerMode> AUTO_COMBAT_REDUCER_START = new CFG<>("ui.combat.auto_reducer_start", CombatReducerMode.ON);
@@ -261,6 +283,7 @@ public class CFG<T> {
     public static final CFG<Double> LEGACY_BGM_VOLUME = new CFG<>("audio.legacy_bgm.volume", 0.5, new com.google.gson.reflect.TypeToken<Double>(){});
     public static final CFG<Boolean> IMPROVED_INSTRUMENT_MUSIC_WINDOW = new CFG<>("audio.instrument.improved_window", true);
     public static final CFG<Integer> INSTRUMENTS_SOUND_VOLUME = new CFG<>("audio.instrument.volume", 70);
+    public static final CFG<Integer> MINING_SOUND_VOLUME = new CFG<>("audio.mining.volume", 100);
     public static final CFG<String> ACTIVE_CONFIG_PROFILE = new CFG<>("profiles.active", "default");
     public static final CFG<Map<String, Map<String, Object>>> CONFIG_PROFILES = new CFG<>("profiles.saved", new HashMap<>(), new TypeToken<Map<String, Map<String, Object>>>(){});
 

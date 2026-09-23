@@ -190,6 +190,7 @@ public class Equipory extends Widget implements DTarget {
     public void wdgmsg(Widget sender, String msg, Object... args) {
 	if (sender  instanceof GItem && wmap.containsKey(sender) && msg.equals("ttupdate")) {
 	    bonuses.update(slots);
+	    synchronized (ava) {seq++;}
 	} else {
 	    super.wdgmsg(sender, msg, args);
 	}

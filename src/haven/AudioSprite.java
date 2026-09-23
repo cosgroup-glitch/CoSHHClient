@@ -42,6 +42,13 @@ public class AudioSprite {
 	return(null);
     }
 
+    private static CS stream(Resource res, Audio.Clip clip) {
+	CS stream = clip.stream();
+	if(res.name.equals("sfx/items/pickaxe") || res.name.equals("sfx/mineout"))
+	    stream = new Audio.VolAdjust(stream, CFG.MINING_SOUND_VOLUME.get() / 100.0);
+	return stream;
+    }
+
     public static final Sprite.Factory fact = new Sprite.Factory() {
 	    public Sprite create(Sprite.Owner owner, Resource res, Message sdt) {
 		{
@@ -68,7 +75,7 @@ public class AudioSprite {
 
 	public ClipSprite(Owner owner, Resource res, Audio.Clip clip) {
 	    super(owner, res);
-	    this.clip = new ActAudio.PosClip(new Audio.Monitor(clip.stream()) {
+	    this.clip = new ActAudio.PosClip(new Audio.Monitor(stream(res, clip)) {
 		    protected void eof() {
 			super.eof();
 			done = true;

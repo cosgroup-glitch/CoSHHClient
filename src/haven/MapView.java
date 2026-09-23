@@ -2696,7 +2696,8 @@ public class MapView extends PView implements DTarget, Console.Directory {
 		    tt = null;
 		    glob.map.remove(ol);
 		    mgrab.remove();
-		    wdgmsg("sel", sc, ec, modflags);
+		    if(!ui.isCursor("gfx/hud/curs/mine") || MiningSafetyAssistant.allowSelection(ui.gui, sc, ec))
+			wdgmsg("sel", sc, ec, modflags);
 		    sc = null;
 		}
 		return(true);

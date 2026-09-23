@@ -738,6 +738,8 @@ public class Window extends Widget {
 			b.action = () -> {
 			    if(CFG.LEGACY_BGM_ENABLED.get())
 				me.ender.LegacyAudioPlayer.play("symbel", false, CFG.LEGACY_BGM_VOLUME.get());
+			    if((b.ui != null) && (b.ui.gui != null))
+				b.ui.gui.startFeastStatsTracker();
 			    if(orig != null) orig.run();
 			};
 		    }

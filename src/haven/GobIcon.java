@@ -794,6 +794,18 @@ public class GobIcon extends GAttrib {
 		AlarmManager.ensure(resource, setting.icon.name());
 	    AlarmManager.setEnabled(resource, enabled);
 	}
+
+	private void resetAllNotifications() {
+	    AlarmManager.resetToDefaults();
+	    for(Setting setting : conf.settings.values())
+		setting.notify = alarmEnabled(setting);
+	    conf.dsave();
+	    ListIcon selected = list.sel;
+	    if(selected != null)
+		list.change(selected);
+	    list.reorder = true;
+	    ui.msg("Alarm notifications reset to defaults.");
+	}
     
 	private static final Text.Foundry elf = CharWnd.attrf;
 	private static final int elh = elf.height() + UI.scale(2);
@@ -966,6 +978,8 @@ public class GobIcon extends GAttrib {
 			conf.dsave();
 		    }
 		}, UI.scale(5));
+	    left.last(new Button(UI.scale(250), "Reset all to defaults", this::resetAllNotifications)
+		.settip("Restore default notification sounds, volumes, and enabled states"), UI.scale(5));
 	    cont.pack();
 	    left.pack();
 	    root.pack();

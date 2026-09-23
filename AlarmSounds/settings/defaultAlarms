@@ -23,7 +23,7 @@ gfx/kritter/walrus/walrus;true;Walrus;Walrus/ND_Walrus;20;false
 gfx/kritter/wolf/wolf;true;Wolf;Wolf/ND_Wolf;25;false
 gfx/kritter/wolverine/wolverine;true;Wolverine;Wolverine/ND_Wolverine;50;false
 gfx/terobjs/looserock;true;Loose Rock;Loose Rock/ND_HeyWatchout;30;false
-gfx/terobjs/herbs/bloatedbolete;false;Curio: Bloated Bolete;Curios/ND_MarioCoin;25;false
-gfx/terobjs/herbs/edelweiss;true;Curio: Edelweiss;Curios/ND_MarioCoin;25;false
-gfx/terobjs/herbs/flotsam;true;Curio: Peculiar Flotsam;Curios/ND_MarioCoin;25;false
-gfx/terobjs/herbs/glimmermoss;true;Curio: Glimmermoss;Curios/ND_MarioCoin;25;false
+gfx/terobjs/herbs/bloatedbolete;false;Curio: Bloated Bolete;defaults/ND_MarioCoin;25;false
+gfx/terobjs/herbs/edelweiss;true;Curio: Edelweiss;defaults/ND_MarioCoin;25;false
+gfx/terobjs/herbs/flotsam;true;Curio: Peculiar Flotsam;defaults/ND_MarioCoin;25;false
+gfx/terobjs/herbs/glimmermoss;true;Curio: Glimmermoss;defaults/ND_MarioCoin;25;false

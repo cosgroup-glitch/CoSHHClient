@@ -404,8 +404,9 @@ public class BAttrWnd extends Widget {
 	public void trig(Indir<Resource> ev) {
 	    etr = (enew != null)?enew:els;
 	    trev = ev;
+	    if((ui != null) && (ui.gui != null) && (ui.gui.feastStatsWindow != null))
+		ui.gui.feastStatsWindow.statGained(ev);
 	}
-	
 	private Tex rtip = null;
 	public Object tooltip(Coord c, Widget prev) {
 	    if(rtip == null) {

@@ -14,6 +14,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 public class AlarmManager {
 
+	private static final String DEFAULT_SOUND_FOLDER = "defaults";
 	private static LinkedHashMap<String, Alarm> alarms = new LinkedHashMap<String, Alarm>();
 	private static LinkedHashMap<String, String> soundFolders = new LinkedHashMap<String, String>();
 
@@ -32,7 +34,7 @@ public class AlarmManager {
 
 	// Play an alarm for gob with resname, if it has one
 	public static boolean play(String resname, Gob gob) {
-		Alarm al = alarms.get(resname);
+		Alarm al = alarms.get(resourceKey(resname));
 		if (al != null && al.enabled && !gob.anyOf(GobTag.KO, GobTag.DEAD)) {
 			al.play(gob.glob.sess.ui);
 			return true;
@@ -41,25 +43,26 @@ public class AlarmManager {
 	}
 
 	public static synchronized boolean has(String resname) {
-		return resname != null && alarms.containsKey(resname);
+		return resname != null && alarms.containsKey(resourceKey(resname));
 	}
 
 	public static synchronized boolean enabled(String resname, boolean fallback) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		return alarm == null ? fallback : alarm.enabled;
 	}
 
 	public static synchronized String sound(String resname) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		return alarm == null ? null : alarm.filePath;
 	}
 
 	public static synchronized int volume(String resname, int fallback) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		return alarm == null ? fallback : alarm.volume;
 	}
 
 	public static synchronized void create(String resname, String name, String sound, int volume) {
+		resname = resourceKey(resname);
 		if(resname == null || resname.isEmpty() || alarms.containsKey(resname))
 			return;
 		alarms.put(resname, new Alarm(true, name == null ? "" : name, normalizeSound(sound), volume));
@@ -72,7 +75,7 @@ public class AlarmManager {
 	}
 
 	public static synchronized void setEnabled(String resname, boolean enabled) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		if(alarm != null && alarm.enabled != enabled) {
 			alarm.enabled = enabled;
 			save();
@@ -80,7 +83,7 @@ public class AlarmManager {
 	}
 
 	public static synchronized void setSound(String resname, String filename) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		if(alarm != null && filename != null && !filename.isEmpty()) {
 			alarm.filePath = normalizeSound(filename);
 			save();
@@ -88,7 +91,7 @@ public class AlarmManager {
 	}
 
 	public static synchronized void setVolume(String resname, int volume) {
-		Alarm alarm = alarms.get(resname);
+		Alarm alarm = alarms.get(resourceKey(resname));
 		if(alarm != null && alarm.volume != volume) {
 			alarm.volume = volume;
 			save();
@@ -99,6 +102,13 @@ public class AlarmManager {
 		if(sound == null || sound.isEmpty() || sound.startsWith("res:"))
 			return sound;
 		return sound.endsWith(".wav") ? sound : sound + ".wav";
+	}
+
+	private static String resourceKey(String resource) {
+		if(resource == null)
+			return null;
+		int variant = resource.indexOf('[');
+		return variant < 0 ? resource : resource.substring(0, variant);
 	}
 
 	public static void preview(String sound, int volume, UI ui) {
@@ -177,6 +187,7 @@ public class AlarmManager {
 	}
 
 	public static synchronized String soundFolder(String resname) {
+		resname = resourceKey(resname);
 		String folder = soundFolders.get(resname);
 		if(folder != null && !folder.isEmpty())
 			return folder;
@@ -219,6 +230,11 @@ public class AlarmManager {
 		} catch(IOException e) {
 			new Warning(e, "could not load default alarm sounds").issue();
 		}
+		for(String sound : soundFiles(DEFAULT_SOUND_FOLDER)) {
+			String filename = new File(sound).getName();
+			String name = filename.substring(0, filename.length() - ".wav".length());
+			sounds.add(new SoundOption(name, sound));
+		}
 		return sounds;
 	}
 
@@ -238,12 +254,31 @@ public class AlarmManager {
 		try {
 			for(String s : Files.readAllLines(Paths.get(config.toURI()), StandardCharsets.UTF_8)) {
 				String[] split = s.split(";");
-				if(split.length >= 5 && !alarms.containsKey(split[0]))
-					alarms.put(split[0], new Alarm(Boolean.parseBoolean(split[1]), split[2], split[3], Integer.parseInt(split[4])));
+				if(split.length >= 5) {
+					String resource = legacyResource(split[0]);
+					String sound = legacySound(resource, split[3]);
+					if(!alarms.containsKey(resource))
+						alarms.put(resource, new Alarm(Boolean.parseBoolean(split[1]), split[2], sound, Integer.parseInt(split[4])));
+				}
 			}
 		} catch(IOException | NumberFormatException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private static String legacyResource(String resource) {
+		if("gfx/kritter/stoat/icon".equals(resource))
+			return "gfx/kritter/stoat/stoat";
+		return resource;
+	}
+
+	private static String legacySound(String resource, String sound) {
+		String normalized = normalizeSound(sound);
+		if("gfx/kritter/moose/moose".equals(resource) && "ND_Moose.wav".equalsIgnoreCase(normalized))
+			return "Moose/Moose.wav";
+		if("gfx/kritter/stoat/stoat".equals(resource) && "Stoat.wav".equalsIgnoreCase(normalized))
+			return "Stoat/Stoat.wav";
+		return sound;
 	}
 
 	private static void loadSoundFolders(File config) {
@@ -278,11 +313,16 @@ public class AlarmManager {
 	}
 
 	// Loads the default settings
-	public static void defaultSettings() {
+	public static synchronized void defaultSettings() {
 		alarms.clear();
 		soundFolders.clear();
 		loadFromFile(defaultConfigFile());
 		loadSoundFolders(defaultConfigFile());
+	}
+
+	public static synchronized void resetToDefaults() {
+		defaultSettings();
+		save();
 	}
 
 	public static File alarmDir() {
@@ -306,12 +346,24 @@ public class AlarmManager {
 			File dir = alarmDir();
 			Files.createDirectories(dir.toPath());
 			Files.createDirectories(new File(dir, "settings").toPath());
+			Files.createDirectories(new File(dir, DEFAULT_SOUND_FOLDER).toPath());
 			Path bundled = bundledAlarmDir();
-			if(bundled != null)
+			if(bundled != null) {
 				copyMissing(bundled, dir.toPath());
+				copyManagedDefault(bundled, dir.toPath(), "defaultAlarms");
+				copyManagedDefault(bundled, dir.toPath(), "defaultSounds");
+			}
 		} catch(IOException e) {
 			e.printStackTrace(Debug.log);
 		}
+	}
+
+	private static void copyManagedDefault(Path bundled, Path installed, String name) throws IOException {
+		Path source = bundled.resolve("settings").resolve(name);
+		Path target = installed.resolve("settings").resolve(name);
+		if(!Files.isRegularFile(source) || (Files.exists(target) && Files.isSameFile(source, target)))
+			return;
+		Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
 	}
 
 	private static Path bundledAlarmDir() throws IOException {
@@ -364,7 +416,9 @@ public class AlarmManager {
 		}
 
 		public void play(UI ui) {
-			preview(filePath, volume, ui);
+			if(ui == null || ui.sess == null)
+				return;
+			ui.sess.glob.loader.defer(() -> preview(filePath, volume, ui), null);
 		}
 	}
 

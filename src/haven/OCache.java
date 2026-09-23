@@ -357,7 +357,14 @@ public class OCache implements Iterable<Gob> {
 	}
 	
 	public Sprite create(Sprite.Owner owner) {
-	    return(Sprite.create(owner, res.get(), new MessageBuf(sdt)));
+	    Resource loaded = null;
+	    try {
+		loaded = res.get();
+		return(Sprite.create(owner, loaded, new MessageBuf(sdt)));
+	    } catch(Resource.LoadFailedException e) {
+		Debug.log.printf("Skipping unavailable object overlay %s: %s%n", res, e.getMessage());
+		return(new Sprite(owner, loaded) {});
+	    }
 	}
 
 	public String toString() {

@@ -58,6 +58,15 @@ public class Fightsess extends Widget {
     public static final Tex useframe = Resource.loadtex("gfx/hud/combat/lastframe");
     public static final Coord useframeo = (useframe.sz().sub(off)).div(2);
     public static final int actpitch = UI.scale(50);
+    private static final LinkedHashMap<Integer, Tex> damagePredictionTex = new LinkedHashMap<Integer, Tex>(128, 0.75f, true) {
+	protected boolean removeEldestEntry(Map.Entry<Integer, Tex> eldest) {
+	    if(size() > 128) {
+		eldest.getValue().dispose();
+		return true;
+	    }
+	    return false;
+	}
+    };
     public static final KeyBinder.KeyBind[] keybinds = new KeyBinder.KeyBind[]{
 	new KeyBinder.KeyBind(KeyEvent.VK_1, NONE),
 	new KeyBinder.KeyBind(KeyEvent.VK_2, NONE),
@@ -744,6 +753,8 @@ public class Fightsess extends Widget {
 		FastText.aprintf(g, cdc, 0.5, 0.5, "%.1f", fv.atkct - now);
 	    }
 	    g.image(cdframe, altui ? new Coord(x0, y0).sub(cdframe.sz().div(2)) : cdc.sub(cdframe.sz().div(2)));
+	    if(CFG.SHOW_COMBAT_AGILITY_ESTIMATE.get() && fv.current != null)
+		FastText.aprintf(g, cdc.add(0, UI.scale(34)), 0.5, 0.5, "%s", CombatPrediction.agility(fv.current));
 	}
 	try {
 	    Indir<Resource> lastact = fv.lastact;
@@ -807,6 +818,11 @@ public class Fightsess extends Widget {
 			g.aimage(Text.renderstroked(String.format("%.1f", act.ct - now)).tex(), ca.add(hsz.x, 0), 0.5, 0);
 		    }
 		    if(CFG.SHOW_COMBAT_KEYS.get()) {g.aimage(keytex(i), ca.add(img.sz()), 1, 1);}
+		    if(CFG.SHOW_COMBAT_DAMAGE_PREDICTION.get() && fv.current != null) {
+			Integer damage = CombatPrediction.damage(ui.gui, fv.current, act.res);
+			if(damage != null)
+			    g.aimage(damagePredictionTex(damage), ca.add(UI.scale(16), UI.scale(43)), 0.5, 0.5);
+		    }
 		    
 		    if(i == use) {
 			g.image(indframe, ca.sub(indframeo));
@@ -821,6 +837,13 @@ public class Fightsess extends Widget {
 	    } catch(Loading l) {}
 	}
 	drawReducerBar(g, altui, xa, bottom);
+    }
+
+    private static Tex damagePredictionTex(int damage) {
+	synchronized(damagePredictionTex) {
+	    return damagePredictionTex.computeIfAbsent(damage,
+		value -> Text.renderstroked(Integer.toString(value), Color.RED, Color.BLACK).tex());
+	}
     }
 
     private void drawReducerBar(GOut g, boolean altui, int xa, int bottom) {

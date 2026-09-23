@@ -70,6 +70,8 @@ public class Fightview extends Widget {
 	public int gst, ip, oip;
 	public Indir<Resource> lastact = null;
 	public double lastuse = 0;
+	public double minAgi = 0;
+	public double maxAgi = 2;
 	public boolean invalid = false;
 
         public Relation(long gobid) {
@@ -467,7 +469,9 @@ public class Fightview extends Widget {
             return;
 	} else if(msg == "atkc") {
 	    atkcs = Utils.rtime();
-	    atkct = atkcs + (Utils.dv(args[0]) * 0.06);
+	    double cooldown = Utils.dv(args[0]);
+	    atkct = atkcs + (cooldown * 0.06);
+	    CombatPrediction.updateAgility(ui.gui, current, lastact, cooldown);
 	    return;
 	} else if(msg == "blk") {
 	    blk = ui.sess.getresv(args[0]);

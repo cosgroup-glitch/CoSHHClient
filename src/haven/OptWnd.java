@@ -529,6 +529,12 @@ public class OptWnd extends WindowX {
 			CFG.INSTRUMENTS_SOUND_VOLUME.set(val);
 		    }
 		}, prev.pos("bl").adds(0, 2));
+	    prev = add(new Label("Mining sound volume"), prev.pos("bl").adds(0, 5));
+	    prev = add(new HSlider(UI.scale(200), 0, 100, CFG.MINING_SOUND_VOLUME.get()) {
+		    public void changed() {
+			CFG.MINING_SOUND_VOLUME.set(val);
+		    }
+		}, prev.pos("bl").adds(0, 2));
 	    add(new PButton(UI.scale(200), "Back", 27, back), prev.pos("bl").adds(0, 30));
 	    pack();
 	}

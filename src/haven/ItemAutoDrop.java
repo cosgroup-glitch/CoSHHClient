@@ -145,10 +145,43 @@ public class ItemAutoDrop {
 	    p = add(new CFGBox("Don't drop filtered items", CFG.AUTO_DROP_RESPECT_FILTER).set(CFGWnd::respectFilterChanged), p).pos("bl").addys(10);
 	    p = add(new Label("Drop item on this window to add it to list"), p).pos("bl");
 	    add(new Label("Right-click item to remove it"), p);
+
+	    int mx = UI.scale(245), my = 0;
+	    Widget mining = add(new Label("Mining auto-drop"), mx, my);
+	    my = mining.pos("bl").y + UI.scale(6);
+	    mining = add(new CFGBox("Enable mining auto-drop", CFG.MINING_AUTO_DROP_ENABLED), mx, my);
+	    my = mining.pos("bl").y + UI.scale(3);
+	    mining = add(new CFGBox("Include other containers", CFG.MINING_AUTO_DROP_CONTAINERS), mx, my);
+	    my = mining.pos("bl").y + UI.scale(3);
+	    mining = add(new CFGBox("Only with mining cursor", CFG.MINING_AUTO_DROP_CURSOR_ONLY), mx, my);
+	    my = mining.pos("bl").y + UI.scale(10);
+	    mining = add(new Label("Drop items below quality"), mx, my);
+	    my = mining.pos("bl").y + UI.scale(5);
+	    my = addMiningRule("Stones", CFG.MINING_AUTO_DROP_STONES, CFG.MINING_AUTO_DROP_STONES_Q, mx, my);
+	    my = addMiningRule("Coal", CFG.MINING_AUTO_DROP_COAL, CFG.MINING_AUTO_DROP_COAL_Q, mx, my);
+	    my = addMiningRule("Ores", CFG.MINING_AUTO_DROP_ORES, CFG.MINING_AUTO_DROP_ORES_Q, mx, my);
+	    my = addMiningRule("Precious ores", CFG.MINING_AUTO_DROP_PRECIOUS, CFG.MINING_AUTO_DROP_PRECIOUS_Q, mx, my);
+	    my = addMiningRule("Mined curios", CFG.MINING_AUTO_DROP_CURIOS, CFG.MINING_AUTO_DROP_CURIOS_Q, mx, my);
+	    addMiningRule("Quarryartz", CFG.MINING_AUTO_DROP_QUARRYARTZ, CFG.MINING_AUTO_DROP_QUARRYARTZ_Q, mx, my);
 	    
 	    pack();
 	    setfocus(list);
 	    populateList();
+	}
+
+	private int addMiningRule(String label, CFG<Boolean> enabled, CFG<Integer> threshold, int x, int y) {
+	    Widget box = add(new CFGBox(label, enabled), x, y);
+	    add(new Label("Q <"), x + UI.scale(132), y + UI.scale(2));
+	    add(new TextEntry(UI.scale(42), Integer.toString(threshold.get())) {
+		protected void changed() {
+		    super.changed();
+		    try {
+			threshold.set(Integer.parseInt(text()));
+		    } catch(NumberFormatException ignored) {
+		    }
+		}
+	    }, x + UI.scale(158), y - UI.scale(1));
+	    return box.pos("bl").y + UI.scale(5);
 	}
 	
 	private static void respectFilterChanged(Boolean v) {

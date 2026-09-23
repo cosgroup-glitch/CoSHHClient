@@ -194,6 +194,32 @@ public class Global implements LocalOverlay {
 	    update = false;
 	}
     }
+
+    public double supportHealth(Coord tc) {
+	double[] best = {-1};
+	Area tile = Area.sized(tc, new Coord(1, 1));
+	synchronized(current) {
+	    for(Coverage cov : current) {
+		if(!cov.real || cov.removed || cov.gob.removed)
+		    continue;
+		final boolean[] covered = {false};
+		cov.cover(cov.gob.rc, cov.gob.a, tile, c -> covered[0] = true);
+		if(covered[0]) {
+		    GobHealth health = cov.gob.getattr(GobHealth.class);
+		    best[0] = Math.max(best[0], (health == null) ? 1.0 : health.hp);
+		}
+	    }
+	}
+	return best[0];
+    }
+
+    public boolean supports(Area area) {
+	for(Coord tc : area) {
+	    if(supportHealth(tc) < 0)
+		return false;
+	}
+	return true;
+    }
 }
 
 /* >pagina: ShowCover$Fac */

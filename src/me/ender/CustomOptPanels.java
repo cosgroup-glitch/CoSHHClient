@@ -205,6 +205,14 @@ public class CustomOptPanels {
 
 	y += STEP;
 	panel.add(new CFGBox("Show combat damage", CFG.SHOW_COMBAT_DMG), x, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Show target agility estimate", CFG.SHOW_COMBAT_AGILITY_ESTIMATE,
+	    "Estimates the target's agility ratio from your observed attack cooldowns."), x, y);
+
+	y += STEP;
+	panel.add(new CFGBox("Show attack damage prediction", CFG.SHOW_COMBAT_DAMAGE_PREDICTION,
+	    "Shows estimated raw damage for combat attacks at the target's current openings. Armor is not included."), x, y);
 	
 	y += STEP;
 	panel.add(new CFGBox("Clear player damage after combat", CFG.CLEAR_PLAYER_DMG_AFTER_COMBAT), x, y);

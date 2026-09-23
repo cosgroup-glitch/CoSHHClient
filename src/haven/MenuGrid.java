@@ -941,6 +941,8 @@ public class MenuGrid extends Widget implements KeyBinding.Bindable {
 	makeLocal("paginae/add/autobot", Action.BOT_PICK_ALL_HERBS);
 	makeLocal("paginae/add/hide_trees", Action.TOGGLE_HIDE_TREES, CFG.HIDE_TREES::get);
 	makeLocal("paginae/add/minesweeper", Minesweeper::paginaAction, CFG.SHOW_MINESWEEPER_OVERLAY::get);
+	makeLocal("paginae/add/mining_safety", Action.OPEN_MINING_SAFETY);
+	makeLocal("paginae/add/ore_counter", Action.OPEN_ORE_COUNTER);
 	makeLocal("paginae/add/toggles/flat_terrain", CFG.FLAT_TERRAIN);
 	makeLocal("paginae/add/toggles/flavor", CFG.DISPLAY_FLAVOR);
 	makeLocal("paginae/add/toggles/autodrink", CFG.AUTO_DRINK_ENABLED);

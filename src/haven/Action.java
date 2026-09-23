@@ -21,6 +21,8 @@ public enum Action {
     OPEN_CRAFT_DB(GameUI::toggleCraftDB, "Open crafting DB"),
     OPEN_ALCHEMY_DB(GameUI::toggleAlchemyDB, "Open alchemy"),
     OPEN_QUEST_HELP(GameUI::toggleQuestHelper, "Open quest helper", "Opens window with uncompleted tasks for all active quests."),
+    OPEN_MINING_SAFETY(GameUI::toggleMiningSafetyAssistant, "Mining Safety Assistant"),
+    OPEN_ORE_COUNTER(GameUI::toggleOreAndStoneCounter, "Ore & Stone Counter"),
     TOGGLE_CURSOR(GameUI::toggleHand, "Toggle cursor item", "Hide/show item on a cursor. Allows you to walk with item on cursor when hidden."),
     TOGGLE_STUDY(GameUI::toggleStudy, "Toggle study window"),
     FILTER(GameUI::toggleFilter, "Show item filter"),

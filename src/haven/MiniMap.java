@@ -486,7 +486,7 @@ public class MiniMap extends Widget {
 	    String alarmResource = gob.resid();
 	    if(AlarmManager.has(alarmResource)) {
 		this.notify = AlarmManager.enabled(alarmResource, conf.notify);
-		this.snotify = null;
+		this.snotify = this.notify ? ignored -> gob.playAlarm() : null;
 	    } else if(AlarmManager.resourceForIcon(conf.id.res, conf.icon.name()) != null) {
 		/* A different object (for example, a dungeon entrance) can share an
 		 * animal's map icon. Only an exact alarm resource may use its sound. */

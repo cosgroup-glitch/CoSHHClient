@@ -90,6 +90,9 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public CharWnd chrwdg;
     public MapWnd2 mapfile;
     public Minesweeper minesweeper;
+    public MiningSafetyAssistant miningSafetyAssistant;
+    public OreAndStoneCounter oreAndStoneCounter;
+    public FeastStatsWindow feastStatsWindow;
     public TileHighlight.TileHighlightCFG tileHighlight;
     public BuddyWnd buddies;
     public EquipProxy eqproxyHandBelt, eqproxyPouchBack;
@@ -741,6 +744,24 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    public void toggleMiningSafetyAssistant() {
+	if(miningSafetyAssistant == null) {
+	    miningSafetyAssistant = add(new MiningSafetyAssistant(this),
+		Utils.getprefc("wndc-mining-safety", ClientUtils.getScreenCenter(ui)));
+	} else {
+	    miningSafetyAssistant.reqdestroy();
+	}
+    }
+
+    public void toggleOreAndStoneCounter() {
+	if(oreAndStoneCounter == null) {
+	    oreAndStoneCounter = add(new OreAndStoneCounter(this),
+		Utils.getprefc("wndc-ore-stone-counter", ClientUtils.getScreenCenter(ui)));
+	} else {
+	    oreAndStoneCounter.reqdestroy();
+	}
+    }
+
     public void toggleMap() {
 	if((mapfile != null) && mapfile.show(!mapfile.visible)) {
 	    mapfile.raise();
@@ -1335,6 +1356,18 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	}
     }
 
+    public void startFeastStatsTracker() {
+	if(feastStatsWindow != null) {
+	    feastStatsWindow.show();
+	    feastStatsWindow.raise();
+	    setfocus(feastStatsWindow);
+	    return;
+	}
+	feastStatsWindow = add(new FeastStatsWindow(this),
+		Utils.getprefc("wndc-feast-gains", UI.scale(new Coord(420, 180))));
+	setfocus(feastStatsWindow);
+    }
+
     private final BMap<String, Window> wndids = new HashBMap<String, Window>();
 
     public void addchild(Widget child, Object... args) {
@@ -1615,6 +1648,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    chrwdg = null;
 	} else if(w == fsess) {
 	    fsess = null;
+	} else if(w == feastStatsWindow) {
+	    feastStatsWindow = null;
 	}
 	if(w instanceof MeterWidgetBox) {
 	    meters.remove(((MeterWidgetBox)w).meter);
@@ -1917,6 +1952,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	    afk = false;
 	}
 	mapfiletick();
+	MiningSafetyAssistant.monitor(this);
     }
 
     public void uimsg(String msg, Object... args) {

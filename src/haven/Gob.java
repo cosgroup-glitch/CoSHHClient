@@ -1600,7 +1600,7 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
 	updateAnimFreeze(tags);
     }
 
-    private void playAlarm() {
+    void playAlarm() {
 	if(id < 0 || alarmPlayed.contains(id))
 	    return;
 	String name = resid();
