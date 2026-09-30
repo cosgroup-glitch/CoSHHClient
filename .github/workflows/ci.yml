@@ -38,6 +38,15 @@ jobs:
       - name: Build client
         run: ant -noinput bin
 
+      - name: Check archive integrity and finalizer regressions
+        run: python3 tools/run-client-reliability-tests.py
+
+      - name: Check world-resource fallback regressions
+        run: python3 tools/run-drawable-fallback-tests.py
+
+      - name: Check concurrent object labels
+        run: python3 tools/run-gob-info-text-tests.py
+
       - name: Run unit tests if configured
         run: |
           if ant -projecthelp -verbose | grep -qE '^[[:space:]]+test[[:space:]]'; then

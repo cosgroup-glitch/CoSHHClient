@@ -1467,6 +1467,12 @@ public class Gob implements RenderTree.Node, Sprite.Owner, Skeleton.ModOwner, Eq
     }
     
     public String tooltip() {
+	Drawable current = drawable;
+	if(current instanceof ResDrawable) {
+	    Resource.LoadFailedException failure = ((ResDrawable)current).loadFailure;
+	    if(failure != null)
+		return "Resource unavailable: " + failure.name + " (v" + failure.ver + ")";
+	}
 	String tt = null;
 	GobIcon icon = getattr(GobIcon.class);
 	if(icon != null) {

@@ -1,3 +1,9 @@
+$size[14]{$u{update on 30.09.2026 v0.1.11:}
+* Show purple placeholders for failed world-object resources instead of crashing
+* Check client program archives for corruption at startup
+* Fix concurrent object-label rendering crashes
+* Handle finalizer interruptions without misleading warnings
+`
 $size[14]{$u{update on 08.08.2026 v2:}
 * Merged remaining stuff from ender
 * Fixed map markers flickering and the marker category dropdown not following the list

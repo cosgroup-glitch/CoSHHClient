@@ -32,9 +32,13 @@ import haven.render.*;
 import static haven.Sprite.*;
 
 public class ResDrawable extends Drawable implements Sprite.Owner, EquipTarget {
+    // Explicit launch-only diagnostic. Empty in normal clients; never persisted.
+    private static final String TEST_MISSING_RESOURCE =
+        System.getProperty("kami.test.missing-world-resource", "");
     public final Indir<Resource> res;
     public final Resource rres;
     public final Sprite spr;
+    public final Resource.LoadFailedException loadFailure;
     MessageBuf sdt;
     private String resid;
 
@@ -42,8 +46,23 @@ public class ResDrawable extends Drawable implements Sprite.Owner, EquipTarget {
 	super(gob);
 	this.res = res;
 	this.sdt = new MessageBuf(sdt);
-	this.rres = res.get();
-	spr = Sprite.create(this, rres, this.sdt.clone());
+	Resource loaded;
+	Resource.LoadFailedException failure = null;
+	try {
+	    loaded = res.get();
+	    if(!TEST_MISSING_RESOURCE.isEmpty() && TEST_MISSING_RESOURCE.equals(loaded.name))
+		throw new Resource.LoadFailedException(loaded.name, loaded.ver,
+		    new Resource.LoadException("Simulated failure: kami.test.missing-world-resource", loaded));
+	} catch(Resource.LoadFailedException e) {
+	    // Loading still propagates to the normal asynchronous loader. Only a
+	    // terminal resource failure receives the local, cache-free marker.
+	    failure = e;
+	    loaded = MissingResourceSprite.RESOURCE;
+	}
+	this.rres = loaded;
+	this.loadFailure = failure;
+	spr = (failure == null) ? Sprite.create(this, rres, this.sdt.clone()) :
+	    new MissingResourceSprite(this, failure);
 	if(old || true)
 	    spr.age();
 	resid = makeResId();
@@ -81,7 +100,7 @@ public class ResDrawable extends Drawable implements Sprite.Owner, EquipTarget {
 
     @Override
     public Indir<Resource> getires() {
-	return res;
+	return (loadFailure == null) ? res : rres.indir();
     }
     
     

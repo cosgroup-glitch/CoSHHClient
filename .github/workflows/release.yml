@@ -29,9 +29,16 @@ jobs:
       - name: Build distribution
         run: ant -noinput -Dversion="${GITHUB_REF_NAME#v}" dist
 
+      - name: Verify bug-fix regressions
+        run: |
+          python3 tools/run-client-reliability-tests.py
+          python3 tools/run-drawable-fallback-tests.py
+          python3 tools/run-gob-info-text-tests.py
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: doc/releases/${{ github.ref_name }}.md
           files: |
             dist/Install-KamisLabyrinthClient.bat
             dist/KamisLabyrinthClient.zip

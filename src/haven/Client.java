@@ -364,6 +364,7 @@ public class Client implements Console.Directory {
     }
 
     private static void main2(String[] args) {
+	ClientIntegrity.verifyOwnArchive();
 	Utils.initlocale();
 	initfullscreen.set(CFG.VIDEO_FULL_SCREEN.get());
 	Config.cmdline(args);

@@ -126,7 +126,14 @@ public class Finalizer {
 			break;
 		}
 		try {
-		    Ref ref = (Ref)queue.remove();
+		    Ref ref;
+		    try {
+			ref = (Ref)queue.remove();
+		    } catch(InterruptedException exc) {
+			// A wake-up is not a cleanup failure. remove() clears the
+			// interrupt; keep servicing pending references without spinning.
+			continue;
+		    }
 		    if(ref != null)
 			ref.run();
 		} catch(Throwable exc) {

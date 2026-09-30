@@ -12,6 +12,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,7 +26,9 @@ public class GeneralGobInfo extends GobInfo {
     private static final Color Q_COL = new Color(235, 252, 255, 255);
     private static final Color BARREL_COL = new Color(252, 235, 255, 255);
     private static final Color BG = new Color(0, 0, 0, 84);
-    private static final Map<Pair<Color, String>, Text.Line> TEXT_CACHE = new HashMap<>();
+    // OCache.ctick renders labels for different gobs in parallel. Entries must
+    // be published atomically; an unsynchronized HashMap can return null during resize.
+    private static final Map<Pair<Color, String>, Text.Line> TEXT_CACHE = new ConcurrentHashMap<>();
     public static final int MARGIN = UI.scale(3);
     public static final int PAD = 0;
     private static final Pattern GOB_Q = Pattern.compile("Quality: (\\d+)");
@@ -449,13 +452,7 @@ public class GeneralGobInfo extends GobInfo {
     
     private static Text.Line text(String text, Color col) {
 	Pair<Color, String> key = new Pair<>(col, text);
-	if(TEXT_CACHE.containsKey(key)) {
-	    return TEXT_CACHE.get(key);
-	} else {
-	    Text.Line line = Text.std.renderstroked(text, col, Color.black);
-	    TEXT_CACHE.put(key, line);
-	    return line;
-	}
+	return TEXT_CACHE.computeIfAbsent(key, k -> Text.std.renderstroked(k.b, k.a, Color.black));
     }
     
     private static Tex combine(BufferedImage... parts) {
