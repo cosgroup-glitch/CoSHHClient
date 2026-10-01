@@ -91,6 +91,58 @@ public class MapWnd extends WindowX implements Console.Directory {
 	return(img);
     }
 
+    public static BufferedImage exploredButton(Color bg, Color fg) {
+	Coord sz = UI.scale(20, 20);
+	BufferedImage img = TexI.mkbuf(sz);
+	Graphics2D g = img.createGraphics();
+	g.setColor(bg);
+	g.fillRect(0, 0, sz.x, sz.y);
+	g.setColor(new Color(255, 255, 255, 80));
+	g.drawRect(0, 0, sz.x - 1, sz.y - 1);
+	int cell = Math.max(2, UI.scale(4));
+	int gap = Math.max(1, UI.scale(1));
+	int ox = (sz.x - ((cell * 3) + (gap * 2))) / 2;
+	int oy = (sz.y - ((cell * 3) + (gap * 2))) / 2;
+	for(int y = 0; y < 3; y++) {
+	    for(int x = 0; x < 3; x++) {
+		g.setColor(((x + y) < 3) ? fg : new Color(255, 255, 255, 45));
+		g.fillRect(ox + (x * (cell + gap)), oy + (y * (cell + gap)), cell, cell);
+	    }
+	}
+	g.dispose();
+	return(img);
+    }
+
+    public static ICheckBox exploredToggle() {
+	Tex up = new TexI(exploredButton(new Color(45, 52, 58, 230), new Color(220, 196, 50)));
+	Tex down = new TexI(exploredButton(new Color(24, 70, 43, 245), new Color(50, 245, 110)));
+	Tex hover = new TexI(exploredButton(new Color(65, 75, 82, 245), new Color(255, 225, 65)));
+	ICheckBox ret = new ICheckBox(up, down, hover, down) {
+	    public boolean mousedown(MouseDownEvent ev) {
+		if((ev.b == 1) && ui.modshift && checkhit(ev.c)) {
+		    GameUI gui = getparent(GameUI.class);
+		    if(gui != null)
+			ExploredAreaOptions.open(gui);
+		    return(true);
+		}
+		return(super.mousedown(ev));
+	    }
+	};
+	ret.state(CFG.MMAP_EXPLORED::get)
+	    .set(CFG.MMAP_EXPLORED::set);
+	ret.rclick(() -> {
+		GameUI gui = ret.getparent(GameUI.class);
+		if(gui == null)
+		    return;
+		if(!CFG.MMAP_EXPLORED.get())
+		    CFG.MMAP_EXPLORED.set(true);
+		boolean active = gui.exploredArea.toggleSession();
+		gui.msg(active ? "Exploration session started." : "Exploration session ended and cleared.", GameUI.MsgType.INFO);
+	    });
+	ret.settip("Show explored area\nShift + left-click for options\nRight-click to start/end the green session layer", true);
+	return(ret);
+    }
+
     private final static Predicate<Marker> pmarkers = (m -> m instanceof PMarker);
     private final static Predicate<Marker> smarkers = (m -> m instanceof SMarker);
     private final static Predicate<Marker> custmarkers = (m -> m instanceof CustomMarker);
@@ -182,6 +234,8 @@ public class MapWnd extends WindowX implements Console.Directory {
     
 	btn = topbar.add(new ICheckBox("gfx/hud/mmap/pointer", "", "-d", "-h"), btn.pos("ur"))
 	    .state(CFG.MMAP_POINTER::get).set(CFG.MMAP_POINTER::set).settip("Display pointers");
+
+	btn = topbar.add(exploredToggle(), btn.pos("ur"));
 
 	btn = topbar.add(new IButton(browserbtn(new Color(38, 80, 110, 255), Color.WHITE),
 				     browserbtn(new Color(22, 48, 70, 255), Color.LIGHT_GRAY),

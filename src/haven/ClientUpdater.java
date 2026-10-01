@@ -85,16 +85,14 @@ public class ClientUpdater {
 	if(startupChecked || !configured())
 	    return;
 	startupChecked = true;
-	new HackThread(() -> {
-	    try {
-		UpdateInfo update = check();
-		if(!update.newer())
-		    return;
-		install(update);
-	    } catch(Exception e) {
-		e.printStackTrace(Debug.log);
-	    }
-	}, "kami's labyrinth Client update check").start();
+	try {
+	    UpdateInfo update = check();
+	    if(!update.newer())
+		return;
+	    install(update);
+	} catch(Exception e) {
+	    e.printStackTrace(Debug.log);
+	}
     }
 
     private static Path appdir() throws IOException {
@@ -123,6 +121,8 @@ public class ClientUpdater {
     private static URLConnection openExternal(URL url) throws IOException {
 	URLConnection conn = url.openConnection();
 	conn.addRequestProperty("User-Agent", Http.USER_AGENT);
+	conn.setConnectTimeout(5000);
+	conn.setReadTimeout(15000);
 	return(conn);
     }
 

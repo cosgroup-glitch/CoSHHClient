@@ -142,6 +142,13 @@ public class CFG<T> {
     public static final CFG<Boolean> MMAP_VIEW = new CFG<>("ui.mmap_view", false);
     public static final CFG<Boolean> MMAP_GRID = new CFG<>("ui.mmap_grid", false);
     public static final CFG<Boolean> MMAP_POINTER = new CFG<>("ui.mmap_pointer", false);
+    public static final CFG<Boolean> MMAP_EXPLORED = new CFG<>("ui.mmap_explored", false);
+    public static final CFG<Color> MMAP_EXPLORED_COLOR = new CFG<>("ui.mmap_explored_color", new Color(255, 220, 40));
+    public static final CFG<Integer> MMAP_EXPLORED_OPACITY = new CFG<>("ui.mmap_explored_opacity", 44);
+    public static final CFG<Color> MMAP_EXPLORED_SESSION_COLOR = new CFG<>("ui.mmap_explored_session_color", new Color(30, 235, 90));
+    public static final CFG<Integer> MMAP_EXPLORED_SESSION_OPACITY = new CFG<>("ui.mmap_explored_session_opacity", 56);
+    public static final CFG<Boolean> MMAP_EXPLORED_SESSION_EXPIRE = new CFG<>("ui.mmap_explored_session_expire", false);
+    public static final CFG<Integer> MMAP_EXPLORED_SESSION_MINUTES = new CFG<>("ui.mmap_explored_session_minutes", 20);
     public static final CFG<Boolean> MMAP_CLAIM = new CFG<>("ui.mmap_claim", false);
     public static final CFG<Boolean> MMAP_VILLAGE = new CFG<>("ui.mmap_village", false);
     public static final CFG<Boolean> MMAP_SHOW_BIOMES = new CFG<>("ui.mmap_biomes", false);

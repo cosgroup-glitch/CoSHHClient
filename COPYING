@@ -77,6 +77,10 @@ respective licensing details are as follows:
    `AlarmSounds', were adapted from Nightdawg's Hurricane client:
    <https://github.com/Nightdawg/Hurricane>.
 
+ * The explored-area minimap tracking in `src/haven/ExploredArea.java'
+   and `src/haven/ExploredAreaRenderer.java' was adapted from Nurgling:
+   <https://github.com/Katodiy/nurgling2>.
+
  * The majority of the other files, including the Ant build file
    (`build.xml') and the various small scripts and insignificant data
    files in the `etc' directory (except `etc/icon.png', as described

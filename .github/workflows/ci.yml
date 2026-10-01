@@ -47,6 +47,9 @@ jobs:
       - name: Check concurrent object labels
         run: python3 tools/run-gob-info-text-tests.py
 
+      - name: Check release features
+        run: python3 tools/run-release-feature-tests.py
+
       - name: Run unit tests if configured
         run: |
           if ant -projecthelp -verbose | grep -qE '^[[:space:]]+test[[:space:]]'; then

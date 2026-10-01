@@ -73,6 +73,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public QuestHelper questHelper;
     public GobIcon.Settings iconconf;
     public MiniMap mmap;
+    public final ExploredArea exploredArea;
     public Fightview fv;
     public Fightsess fsess;
     // KamiClient: combat distancing tool, yoinked from Hurricane.
@@ -93,6 +94,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     public MiningSafetyAssistant miningSafetyAssistant;
     public OreAndStoneCounter oreAndStoneCounter;
     public FeastStatsWindow feastStatsWindow;
+    public ExploredAreaOptions exploredAreaOptions;
     public TileHighlight.TileHighlightCFG tileHighlight;
     public BuddyWnd buddies;
     public EquipProxy eqproxyHandBelt, eqproxyPouchBack;
@@ -323,6 +325,7 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	this.chrid = chrid;
 	this.plid = plid;
 	this.genus = genus;
+	this.exploredArea = new ExploredArea(genus);
 	if(MappingClient.initialized()) {
 	    MappingClient.getInstance().setGenus(genus);
 	    MappingClient.getInstance().SetPlayerName(chrid);
@@ -489,6 +492,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 
     @Override
     public void destroy() {
+	exploredArea.close();
+	ExploredAreaRenderer.clear(exploredArea);
 	if(fsess != null)
 	    fsess.forceDestroy();
 	closeWindows();
@@ -645,6 +650,8 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     }
 
     public void dispose() {
+	exploredArea.close();
+	ExploredAreaRenderer.clear(exploredArea);
 	savewndpos();
 	Debug.log = new java.io.PrintWriter(System.err);
 	ui.cons.clearout();
@@ -1822,9 +1829,11 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
     }
 
     public class CornerMap extends MiniMap implements Console.Directory {
+	private final Widget exploredToggle;
 	public CornerMap(Coord sz, MapFile file) {
 	    super(sz, file);
 	    follow(new MapLocator(map));
+	    exploredToggle = add(MapWnd.exploredToggle(), sz.sub(UI.scale(24), UI.scale(24)));
 	}
 
 	public boolean dragp(int button) {
@@ -1859,6 +1868,13 @@ public class GameUI extends ConsoleHost implements Console.Directory, UI.Notice.
 	public void draw(GOut g) {
 	    g.image(bg, Coord.z, UI.scale(bg.sz()));
 	    super.draw(g);
+	    super.draw(g, true);
+	}
+
+	public void resize(Coord sz) {
+	    super.resize(sz);
+	    if(exploredToggle != null)
+		exploredToggle.c = sz.sub(exploredToggle.sz).sub(UI.scale(4), UI.scale(4));
 	}
 
 	public void drawgrid(GOut g, Coord ul, DisplayGrid disp) {

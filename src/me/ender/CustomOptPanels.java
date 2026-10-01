@@ -314,8 +314,12 @@ public class CustomOptPanels {
 	    super(w, label(), false);
 	    action(() -> {
 		CFG.GUI_LOCK.set(!CFG.GUI_LOCK.get());
-		if(!CFG.GUI_LOCK.get())
+		if(!CFG.GUI_LOCK.get()) {
 		    CFG.KEEP_COMBAT_UI_AFTER_COMBAT.set(true);
+		    OptWnd wnd = getparent(OptWnd.class);
+		    if(wnd != null)
+			wnd.reqclose();
+		}
 		update();
 	    });
 	    CFG.GUI_LOCK.observe(this);

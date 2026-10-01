@@ -263,6 +263,7 @@ public class BAttrWnd extends Widget {
 	public static final Tex frame =  Resource.loadtex("gfx/hud/chr/foodm");
 	public static final Coord marg = new Coord(5, 5), trmg = new Coord(10, 10);
 	public double cap;
+	private final FeastFoodCounter foodCounter = new FeastFoodCounter();
 	public List<El> els = new LinkedList<El>();
 	private List<El> enew = null, etr = null;
 	private Indir<Resource> trev = null;
@@ -399,6 +400,12 @@ public class BAttrWnd extends Widget {
 		enew.add(new El(res, a));
 	    }
 	    this.enew = enew;
+	    double total = 0;
+	    for(El el : enew)
+		total += el.a;
+	    boolean ate = foodCounter.update(total);
+	    if(ate && (ui != null) && (ui.gui != null) && (ui.gui.feastStatsWindow != null))
+		ui.gui.feastStatsWindow.foodEaten();
 	}
 	
 	public void trig(Indir<Resource> ev) {

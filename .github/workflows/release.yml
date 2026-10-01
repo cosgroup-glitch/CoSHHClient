@@ -34,6 +34,7 @@ jobs:
           python3 tools/run-client-reliability-tests.py
           python3 tools/run-drawable-fallback-tests.py
           python3 tools/run-gob-info-text-tests.py
+          python3 tools/run-release-feature-tests.py
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

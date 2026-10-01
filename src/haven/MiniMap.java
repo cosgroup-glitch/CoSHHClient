@@ -417,6 +417,19 @@ public class MiniMap extends Widget {
 	    } catch(Loading l) {
 	    }
 	}
+	if(CFG.MMAP_EXPLORED.get() && (ui != null) && (ui.gui != null) && (ui.gui.mmap == this) &&
+	   (ui.gui.map != null) && (sessloc != null)) {
+	    ExploredArea explored = ui.gui.exploredArea;
+	    explored.tick();
+	    Gob player = ui.gui.map.player();
+	    if(player != null) {
+		Coord loaded = player.rc.floor(Coord2d.of(MCache.sgridsz));
+		Coord worldUL = loaded.sub(4, 4).mul(MCache.sgridsz);
+		Coord ul = Coord2d.of(worldUL).floor(MCache.tilesz).add(sessloc.tc);
+		Coord view = Coord2d.of(MCache.sgridsz.mul(9)).floor(MCache.tilesz);
+		explored.update(ul, ul.add(view).add(1, 1), sessloc.seg.id);
+	    }
+	}
 	ticksprites(dt);
 	icons = findicons(icons);
 	if(tvisible()) {
@@ -1173,6 +1186,7 @@ public class MiniMap extends Widget {
     
     public void drawparts(GOut g){
 	drawmap(g);
+	ExploredAreaRenderer.draw(this, g);
 	drawmarkers(g);
 	boolean playerSegment = (sessloc != null) && ((curloc == null) || (sessloc.seg.id == curloc.seg.id));
 	if(dlvl <= 2 && CFG.MMAP_GRID.get()) {drawgrid(g);}

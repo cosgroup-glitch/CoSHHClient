@@ -15,6 +15,7 @@ public class FeastStatsWindow extends WindowX {
     private final GameUI gui;
     private final Map<Indir<Resource>, Integer> levelEvents = new HashMap<>();
     private final List<Widget> rows = new ArrayList<>();
+    private int foodsEaten;
     private boolean dirty = true;
 
     public FeastStatsWindow(GameUI gui) {
@@ -27,6 +28,12 @@ public class FeastStatsWindow extends WindowX {
 	levelEvents.merge(event, 1, Integer::sum);
 	dirty = true;
     }
+
+    public void foodEaten() {
+	foodsEaten++;
+	dirty = true;
+    }
+
     private static class EventName {
 	final String stat;
 	final int levels;
@@ -56,6 +63,11 @@ public class FeastStatsWindow extends WindowX {
 	rows.forEach(Widget::reqdestroy);
 	rows.clear();
 	int y = UI.scale(3);
+	int totalLevels = gains.values().stream().mapToInt(Integer::intValue).sum();
+	rows.add(add(new Label("Total stat gain: +" + totalLevels), UI.scale(5), y));
+	y += UI.scale(18);
+	rows.add(add(new Label("Food eaten (estimated): " + foodsEaten), UI.scale(5), y));
+	y += UI.scale(24);
 	if(gains.isEmpty()) {
 	    rows.add(add(new Label("No gains yet"), UI.scale(5), y));
 	    y += UI.scale(22);

@@ -369,10 +369,10 @@ public class Client implements Console.Directory {
 	initfullscreen.set(CFG.VIDEO_FULL_SCREEN.get());
 	Config.cmdline(args);
 	haven.error.ErrorHandler.setprop("jar.config", Config.confid);
+	ClientUpdater.checkStartup();
 	me.ender.LegacyBGM.onGameStart();
 	setupres();
 	AlarmManager.init();
-	ClientUpdater.checkStartup();
 	Client cl = new Client(Toolkit.instance());
 	try {
 	    UI.Runner main = null;
